@@ -1,40 +1,49 @@
+import React from "react";
+import { View, Text, StyleSheet, ScrollView } from "react-native";
 
-import { View, Text,StyleSheet } from "react-native";
-const HighlightSection = ({style}
-    
-    ) => {
-      return (
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Highlight</Text>
+export default function HighlightSection() {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Highlights</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.card}>
-          <Text style = {styles.text}>🎉 Idag fyller någon i familjen år!</Text>
-          <Text style = {styles.text}>🗓️ Middag bokad imorgon kl. 18:00</Text>
+          <Text style={styles.cardText}>🎂 Mamma fyller år idag!</Text>
         </View>
-      </View>
-)}
+        <View style={styles.card}>
+          <Text style={styles.cardText}>🍽️ Middag kl 18:00</Text>
+        </View>
+        <View style={styles.card}>
+          <Text style={styles.cardText}>🧹 Städning imorgon</Text>
+        </View>
+        {/* Add more cards as needed */}
+      </ScrollView>
+    </View>
+  );
+}
 
-      export default HighlightSection;
-  
-  const styles = StyleSheet.create({
+const styles = StyleSheet.create({
   section: {
-    marginVertical: 16,
-    paddingHorizontal: 16,
+    marginBottom: 20,
+    height: 250,
+    backgroundColor: "#009bba",
   },
+  
   sectionTitle: {
     fontSize: 18,
     fontWeight: "bold",
     marginBottom: 8,
   },
   card: {
-    height:250,
-    
-    backgroundColor: "#f2f2f2",
-    borderRadius: 10,
+    backgroundColor: "#fff",
+    borderRadius: 8,
     padding: 16,
+    marginRight: 12,
+    elevation: 2,
+    minWidth: 160,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  text: {
+  cardText: {
     fontSize: 16,
-    color: "#000",
   },
 });
-//Lägg till en bild 

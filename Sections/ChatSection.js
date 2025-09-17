@@ -1,7 +1,8 @@
 
 import { View, Text,StyleSheet } from "react-native";
-
-<View>
+export default function ChatSection() {
+  return (
+    <View>
       {/* Messenger Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Messenger</Text>
@@ -34,3 +35,20 @@ import { View, Text,StyleSheet } from "react-native";
       </View>
       
       </View>
+)}
+
+const styles = StyleSheet.create({
+  section: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    padding: 12,
+    elevation: 2,
+  },
+});
