@@ -28,7 +28,6 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 20,
     height: 180,
-    backgroundColor: "#f5f5f5",
   },
   sectionTitle: {
     fontSize: 18,
@@ -45,6 +44,10 @@ const styles = StyleSheet.create({
     minWidth: 160,
     justifyContent: "center",
     alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   cardText: {
     fontSize: 16,
