@@ -4,7 +4,6 @@ import HeaderView from "./components/HeaderView";
 import HighlightSection from "./Sections/HighlightSection";
 import CalendarSection from "./Sections/CalendarSection"; 
 import PantrySection from "./Sections/PantrySection";
-import ChatSection from "./Sections/ChatSection";
 import BottomMessengerBar from "./components/BottomMessengerBar";
 import ShoppingListSection from "./Sections/ShoppingListSection";
 import ChoresSection from "./Sections/ChoresSection";
@@ -55,11 +54,11 @@ export default function App({ navigation }) {
       >
         <HighlightSection />
         <CalendarSection />
-        <PantrySection navigation={navigation} /> {/* Pass navigation here */}
-        <ShoppingListSection />
-        <ChoresSection />
-        <BillsSection />
-        <NotesSection />
+        <PantrySection navigation={navigation} />
+        <ShoppingListSection navigation={navigation} />
+        <ChoresSection navigation={navigation} />
+        <BillsSection navigation={navigation} />
+        <NotesSection navigation={navigation} />
         <WeatherSection />
         <VisitorsSection />
       </HeaderView>

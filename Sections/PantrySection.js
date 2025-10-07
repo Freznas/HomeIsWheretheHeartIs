@@ -1,5 +1,4 @@
-import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import {Text, StyleSheet, TouchableOpacity } from "react-native";
 
 export default function PantrySection({ navigation }) {
   return (
@@ -18,7 +17,7 @@ export default function PantrySection({ navigation }) {
 const styles = StyleSheet.create({
   section: {
     marginBottom: 20,
-    backgroundColor: "#fff3e0", // Pastel orange/peach
+    backgroundColor: "#fff3e0", 
     borderRadius: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },

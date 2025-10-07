@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, Modal, TextInput, KeyboardAvoidingView, Platform } from "react-native";
-import { Picker } from "@react-native-picker/picker"; // <-- Add this import
+import { Picker } from "@react-native-picker/picker";
 
 const initialPantry = [
   { id: "1", name: "Mjölk", quantity: "2", unit: "liter", category: "Mejeri" },
@@ -11,48 +11,101 @@ const initialPantry = [
 export default function PantryPage({ navigation }) {
   const [pantry, setPantry] = useState(initialPantry);
   const [modalVisible, setModalVisible] = useState(false);
+  const [editingItem, setEditingItem] = useState(null); // Track if we're editing
   const [newName, setNewName] = useState("");
   const [newQuantity, setNewQuantity] = useState("");
-  const [newUnit, setNewUnit] = useState("St"); // Default to "St"
+  const [newUnit, setNewUnit] = useState("St");
   const [newCategory, setNewCategory] = useState("");
   const [errors, setErrors] = useState({});
 
   const renderItem = ({ item }) => (
-    <View style={styles.itemCard}>
+    <TouchableOpacity 
+      style={styles.itemCard} 
+      onPress={() => openEditModal(item)}
+      activeOpacity={0.7}
+    >
       <Text style={styles.itemName}>{item.name}</Text>
       <Text style={styles.itemDetails}>
         {item.quantity} {item.unit} • {item.category}
       </Text>
-    </View>
+    </TouchableOpacity>
   );
 
-  const handleAdd = () => {
+  const openEditModal = (item) => {
+    setEditingItem(item);
+    setNewName(item.name);
+    setNewQuantity(item.quantity);
+    setNewUnit(item.unit);
+    setNewCategory(item.category);
+    setModalVisible(true);
+  };
+
+  const openAddModal = () => {
+    setEditingItem(null);
+    setNewName("");
+    setNewQuantity("");
+    setNewUnit("St");
+    setNewCategory("");
+    setModalVisible(true);
+  };
+
+  const handleSave = () => {
     let newErrors = {};
     if (!newName.trim()) newErrors.name = "Fyll i produktnamn";
     if (!newQuantity.trim()) newErrors.quantity = "Fyll i mängd";
-    if (!newUnit.trim()) newErrors.unit = "Fyll i enhet";
     if (!newCategory.trim()) newErrors.category = "Fyll i kategori";
 
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length > 0) return;
 
-    setPantry([
-      ...pantry,
-      {
-        id: (pantry.length + 1).toString(),
-        name: newName.trim(),
-        quantity: newQuantity.trim(),
-        unit: newUnit.trim(),
-        category: newCategory.trim(),
-      },
-    ]);
+    if (editingItem) {
+      // Update existing item
+      setPantry(pantry.map(item => 
+        item.id === editingItem.id 
+          ? {
+              ...item,
+              name: newName.trim(),
+              quantity: newQuantity.trim(),
+              unit: newUnit,
+              category: newCategory.trim(),
+            }
+          : item
+      ));
+    } else {
+      // Add new item
+      setPantry([
+        ...pantry,
+        {
+          id: (pantry.length + 1).toString(),
+          name: newName.trim(),
+          quantity: newQuantity.trim(),
+          unit: newUnit,
+          category: newCategory.trim(),
+        },
+      ]);
+    }
+
     setNewName("");
     setNewQuantity("");
-    setNewUnit("");
+    setNewUnit("St");
     setNewCategory("");
+    setEditingItem(null);
     setErrors({});
     setModalVisible(false);
+  };
+
+  const handleDelete = () => {
+    if (editingItem) {
+      setPantry(pantry.filter(item => item.id !== editingItem.id));
+      setModalVisible(false);
+      setEditingItem(null);
+      setNewName("");
+      setNewQuantity("");
+      setNewUnit("St");
+      setNewCategory("");
+      setErrors({});
+    }
   };
 
   return (
@@ -65,7 +118,7 @@ export default function PantryPage({ navigation }) {
           renderItem={renderItem}
           contentContainerStyle={{ paddingBottom: 24 }}
         />
-        <TouchableOpacity style={styles.addButton} onPress={() => setModalVisible(true)}>
+        <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
           <Text style={styles.addButtonText}>+ Lägg till vara</Text>
         </TouchableOpacity>
         <Modal
@@ -79,7 +132,9 @@ export default function PantryPage({ navigation }) {
             behavior={Platform.OS === "ios" ? "padding" : undefined}
           >
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Lägg till vara</Text>
+              <Text style={styles.modalTitle}>
+                {editingItem ? "Redigera vara" : "Lägg till vara"}
+              </Text>
               <TextInput
                 style={styles.input}
                 placeholder="Produktnamn"
@@ -106,20 +161,19 @@ export default function PantryPage({ navigation }) {
                   {errors.quantity ? <Text style={styles.errorText}>{errors.quantity}</Text> : null}
                 </View>
                 <View style={styles.pickerWrapper}>
+                  <TouchableOpacity style={styles.pickerButton}>
+                    <Text style={styles.pickerButtonText}>{newUnit}</Text>
+                    <Text style={styles.pickerArrow}>▼</Text>
+                  </TouchableOpacity>
                   <Picker
                     selectedValue={newUnit}
-                    onValueChange={(itemValue) => {
-                      setNewUnit(itemValue);
-                      if (errors.unit) setErrors({ ...errors, unit: undefined });
-                    }}
-                    style={styles.picker}
-                    dropdownIconColor="#009bba"
+                    onValueChange={(itemValue) => setNewUnit(itemValue)}
+                    style={styles.hiddenPicker}
                   >
                     <Picker.Item label="St" value="St" />
                     <Picker.Item label="Packages" value="Packages" />
                     <Picker.Item label="Litres" value="Litres" />
                   </Picker>
-                  {errors.unit ? <Text style={styles.errorText}>{errors.unit}</Text> : null}
                 </View>
               </View>
               <TextInput
@@ -133,9 +187,16 @@ export default function PantryPage({ navigation }) {
               />
               {errors.category ? <Text style={styles.errorText}>{errors.category}</Text> : null}
               <View style={styles.modalButtons}>
-                <TouchableOpacity style={styles.modalButton} onPress={handleAdd}>
-                  <Text style={styles.modalButtonText}>Lägg till</Text>
+                <TouchableOpacity style={styles.modalButton} onPress={handleSave}>
+                  <Text style={styles.modalButtonText}>
+                    {editingItem ? "Uppdatera" : "Lägg till"}
+                  </Text>
                 </TouchableOpacity>
+                {editingItem && (
+                  <TouchableOpacity style={[styles.modalButton, { backgroundColor: "#d32f2f" }]} onPress={handleDelete}>
+                    <Text style={styles.modalButtonText}>Ta bort</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity style={[styles.modalButton, { backgroundColor: "#bbb" }]} onPress={() => { setModalVisible(false); setErrors({}); }}>
                   <Text style={styles.modalButtonText}>Avbryt</Text>
                 </TouchableOpacity>
@@ -191,7 +252,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 16,
   },
-  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
@@ -221,6 +281,37 @@ const styles = StyleSheet.create({
     backgroundColor: "#f5f5f5",
     marginBottom: 12,
   },
+  pickerWrapper: {
+    flex: 1,
+    height: 48,
+    borderWidth: 1,
+    borderColor: "#bbb",
+    borderRadius: 8,
+    backgroundColor: "#f5f5f5",
+    marginBottom: 12,
+    justifyContent: "center",
+  },
+  pickerButton: {
+    height: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+  },
+  pickerButtonText: {
+    fontSize: 16,
+    color: "#333",
+  },
+  pickerArrow: {
+    fontSize: 12,
+    color: "#666",
+  },
+  hiddenPicker: {
+    position: "absolute",
+    width: "100%",
+    height: 48,
+    opacity: 0,
+  },
   modalButtons: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -244,20 +335,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginBottom: 6,
     marginLeft: 2,
-  },
-  pickerWrapper: {
-    flex: 1,
-    height: 48, // Ensures the Picker is visible
-    borderWidth: 1,
-    borderColor: "#bbb",
-    borderRadius: 8,
-    backgroundColor: "#f5f5f5",
-    marginBottom: 12,
-    justifyContent: "center",
-  },
-  picker: {
-    width: "100%",
-    height:215,
   },
 });
 
