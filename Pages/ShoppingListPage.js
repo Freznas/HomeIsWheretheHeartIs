@@ -1,210 +1,184 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, Modal, TextInput, KeyboardAvoidingView, Platform } from "react-native";
-import { Picker } from "@react-native-picker/picker";
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  TouchableOpacity,
+  StatusBar,
+  FlatList,
+  Platform,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+} from "react-native";
 
-const initialShoppingList = [
-  { id: "1", name: "Mjölk", quantity: "2", unit: "liter", store: "ICA" },
-  { id: "2", name: "Bananer", quantity: "6", unit: "st", store: "Coop" },
-  { id: "3", name: "Tvättmedel", quantity: "1", unit: "paket", store: "ICA" },
+const initialItems = [
+  { id: "1", name: "Mjölk", quantity: "2L", completed: false, category: "Mejeri" },
+  { id: "2", name: "Bröd", quantity: "1 st", completed: false, category: "Bageri" },
+  { id: "3", name: "Äpplen", quantity: "1 kg", completed: true, category: "Frukt" },
+  { id: "4", name: "Pasta", quantity: "2 paket", completed: false, category: "Torrvaror" },
 ];
 
 export default function ShoppingListPage({ navigation }) {
-  const [shoppingList, setShoppingList] = useState(initialShoppingList);
+  const [items, setItems] = useState(initialItems);
   const [modalVisible, setModalVisible] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
-  const [newName, setNewName] = useState("");
-  const [newQuantity, setNewQuantity] = useState("");
-  const [newUnit, setNewUnit] = useState("St");
-  const [newStore, setNewStore] = useState("");
-  const [errors, setErrors] = useState({});
+  const [newItemName, setNewItemName] = useState("");
+  const [newItemQuantity, setNewItemQuantity] = useState("");
+
+  const toggleComplete = (id) => {
+    setItems(items.map(item => 
+      item.id === id ? { ...item, completed: !item.completed } : item
+    ));
+  };
+
+  const addItem = () => {
+    if (newItemName.trim()) {
+      setItems([
+        ...items,
+        {
+          id: Date.now().toString(),
+          name: newItemName.trim(),
+          quantity: newItemQuantity.trim() || "1 st",
+          completed: false,
+          category: "Övrigt"
+        }
+      ]);
+      setNewItemName("");
+      setNewItemQuantity("");
+      setModalVisible(false);
+    }
+  };
+
+  const deleteItem = (id) => {
+    setItems(items.filter(item => item.id !== id));
+  };
 
   const renderItem = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.itemCard} 
-      onPress={() => openEditModal(item)}
-      activeOpacity={0.7}
-    >
-      <Text style={styles.itemName}>{item.name}</Text>
-      <Text style={styles.itemDetails}>
-        {item.quantity} {item.unit} • {item.store}
-      </Text>
-    </TouchableOpacity>
+    <View style={[styles.itemCard, item.completed && styles.completedItem]}>
+      <TouchableOpacity 
+        style={styles.itemContent}
+        onPress={() => toggleComplete(item.id)}
+      >
+        <View style={[styles.checkbox, item.completed && styles.checkedBox]}>
+          <Text style={styles.checkmark}>{item.completed ? "✓" : ""}</Text>
+        </View>
+        <View style={styles.itemDetails}>
+          <Text style={[styles.itemName, item.completed && styles.completedText]}>
+            {item.name}
+          </Text>
+          <Text style={styles.itemQuantity}>{item.quantity}</Text>
+        </View>
+        <View style={styles.categoryTag}>
+          <Text style={styles.categoryText}>{item.category}</Text>
+        </View>
+      </TouchableOpacity>
+      <TouchableOpacity 
+        style={styles.deleteButton}
+        onPress={() => deleteItem(item.id)}
+      >
+        <Text style={styles.deleteIcon}>×</Text>
+      </TouchableOpacity>
+    </View>
   );
 
-  const openEditModal = (item) => {
-    setEditingItem(item);
-    setNewName(item.name);
-    setNewQuantity(item.quantity);
-    setNewUnit(item.unit);
-    setNewStore(item.store);
-    setModalVisible(true);
-  };
-
-  const openAddModal = () => {
-    setEditingItem(null);
-    setNewName("");
-    setNewQuantity("");
-    setNewUnit("St");
-    setNewStore("");
-    setModalVisible(true);
-  };
-
-  const handleSave = () => {
-    let newErrors = {};
-    if (!newName.trim()) newErrors.name = "Fyll i produktnamn";
-    if (!newQuantity.trim()) newErrors.quantity = "Fyll i mängd";
-    if (!newStore.trim()) newErrors.store = "Fyll i butik";
-
-    setErrors(newErrors);
-
-    if (Object.keys(newErrors).length > 0) return;
-
-    if (editingItem) {
-      // Update existing item
-      setShoppingList(shoppingList.map(item => 
-        item.id === editingItem.id 
-          ? {
-              ...item,
-              name: newName.trim(),
-              quantity: newQuantity.trim(),
-              unit: newUnit,
-              store: newStore.trim(),
-            }
-          : item
-      ));
-    } else {
-      // Add new item
-      setShoppingList([
-        ...shoppingList,
-        {
-          id: (shoppingList.length + 1).toString(),
-          name: newName.trim(),
-          quantity: newQuantity.trim(),
-          unit: newUnit,
-          store: newStore.trim(),
-        },
-      ]);
-    }
-
-    setNewName("");
-    setNewQuantity("");
-    setNewUnit("St");
-    setNewStore("");
-    setEditingItem(null);
-    setErrors({});
-    setModalVisible(false);
-  };
-
-  const handleDelete = () => {
-    if (editingItem) {
-      setShoppingList(shoppingList.filter(item => item.id !== editingItem.id));
-      setModalVisible(false);
-      setEditingItem(null);
-      setNewName("");
-      setNewQuantity("");
-      setNewUnit("St");
-      setNewStore("");
-      setErrors({});
-    }
-  };
+  const completedCount = items.filter(item => item.completed).length;
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor="#3949ab" />
+      
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backIcon}>←</Text>
+        </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Inköpslista</Text>
+          <Text style={styles.headerSubtitle}>
+            {completedCount}/{items.length} klara
+          </Text>
+        </View>
+        <TouchableOpacity 
+          style={styles.addHeaderButton} 
+          onPress={() => setModalVisible(true)}
+        >
+          <Text style={styles.addHeaderIcon}>+</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.container}>
-        <Text style={styles.title}>Inköpslista</Text>
         <FlatList
-          data={shoppingList}
+          data={items}
           keyExtractor={item => item.id}
           renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: 24 }}
+          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
         />
-        <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
+        
+        <TouchableOpacity 
+          style={styles.addButton} 
+          onPress={() => setModalVisible(true)}
+        >
           <Text style={styles.addButtonText}>+ Lägg till vara</Text>
         </TouchableOpacity>
-        <Modal
-          visible={modalVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setModalVisible(false)}
-        >
-          <KeyboardAvoidingView
-            style={styles.modalOverlay}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-          >
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>
-                {editingItem ? "Redigera vara" : "Lägg till vara"}
-              </Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Produktnamn"
-                value={newName}
-                onChangeText={text => {
-                  setNewName(text);
-                  if (errors.name) setErrors({ ...errors, name: undefined });
-                }}
-              />
-              {errors.name ? <Text style={styles.errorText}>{errors.name}</Text> : null}
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <View style={{ flex: 1, marginRight: 8 }}>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Mängd (t.ex. 2)"
-                    value={newQuantity}
-                    onChangeText={text => {
-                      const numeric = text.replace(/[^0-9]/g, "");
-                      setNewQuantity(numeric);
-                      if (errors.quantity) setErrors({ ...errors, quantity: undefined });
-                    }}
-                    keyboardType="numeric"
-                  />
-                  {errors.quantity ? <Text style={styles.errorText}>{errors.quantity}</Text> : null}
-                </View>
-                <View style={styles.pickerWrapper}>
-                  <TouchableOpacity style={styles.pickerButton}>
-                    <Text style={styles.pickerButtonText}>{newUnit}</Text>
-                    <Text style={styles.pickerArrow}>▼</Text>
-                  </TouchableOpacity>
-                  <Picker
-                    selectedValue={newUnit}
-                    onValueChange={(itemValue) => setNewUnit(itemValue)}
-                    style={styles.hiddenPicker}
-                  >
-                    <Picker.Item label="St" value="St" />
-                    <Picker.Item label="Packages" value="Packages" />
-                    <Picker.Item label="Litres" value="Litres" />
-                  </Picker>
-                </View>
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Butik (t.ex. ICA, Coop)"
-                value={newStore}
-                onChangeText={text => {
-                  setNewStore(text);
-                  if (errors.store) setErrors({ ...errors, store: undefined });
-                }}
-              />
-              {errors.store ? <Text style={styles.errorText}>{errors.store}</Text> : null}
-              <View style={styles.modalButtons}>
-                <TouchableOpacity style={styles.modalButton} onPress={handleSave}>
-                  <Text style={styles.modalButtonText}>
-                    {editingItem ? "Uppdatera" : "Lägg till"}
-                  </Text>
-                </TouchableOpacity>
-                {editingItem && (
-                  <TouchableOpacity style={[styles.modalButton, { backgroundColor: "#d32f2f" }]} onPress={handleDelete}>
-                    <Text style={styles.modalButtonText}>Ta bort</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity style={[styles.modalButton, { backgroundColor: "#bbb" }]} onPress={() => { setModalVisible(false); setErrors({}); }}>
-                  <Text style={styles.modalButtonText}>Avbryt</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        </Modal>
       </View>
+
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Lägg till vara</Text>
+              <TouchableOpacity 
+                onPress={() => setModalVisible(false)} 
+                style={styles.closeButton}
+              >
+                <Text style={styles.closeButtonText}>×</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.modalForm}>
+              <Text style={styles.inputLabel}>Produktnamn</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="T.ex. Mjölk, Bröd..."
+                value={newItemName}
+                onChangeText={setNewItemName}
+              />
+              
+              <Text style={styles.inputLabel}>Mängd (valfritt)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="T.ex. 2L, 1 kg..."
+                value={newItemQuantity}
+                onChangeText={setNewItemQuantity}
+              />
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.saveButton} onPress={addItem}>
+                <Text style={styles.saveButtonText}>Lägg till</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.cancelButton} 
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Avbryt</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -212,129 +186,254 @@ export default function ShoppingListPage({ navigation }) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#e3f2fd",
+    backgroundColor: "#f8f9fa",
+  },
+  header: {
+    backgroundColor: "#3949ab",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  backIcon: {
+    fontSize: 20,
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: "center",
+    marginHorizontal: 16,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#fff",
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.8)",
+    marginTop: 2,
+  },
+  addHeaderButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  addHeaderIcon: {
+    fontSize: 24,
+    color: "#fff",
+    fontWeight: "bold",
   },
   container: {
     flex: 1,
-    padding: 20,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-    alignSelf: "center",
+  listContainer: {
+    padding: 16,
+    paddingBottom: 100,
   },
   itemCard: {
     backgroundColor: "#fff",
-    borderRadius: 10,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
-    elevation: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  itemName: {
-    fontSize: 18,
+  completedItem: {
+    opacity: 0.6,
+  },
+  itemContent: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#d1d5db",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  checkedBox: {
+    backgroundColor: "#10b981",
+    borderColor: "#10b981",
+  },
+  checkmark: {
+    color: "#fff",
+    fontSize: 14,
     fontWeight: "bold",
   },
   itemDetails: {
-    fontSize: 14,
-    color: "#555",
-    marginTop: 4,
+    flex: 1,
+  },
+  itemName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1f2937",
+    marginBottom: 4,
+  },
+  completedText: {
+    textDecorationLine: "line-through",
+    color: "#9ca3af",
+  },
+  itemQuantity: {
+    fontSize: 12,
+    color: "#6b7280",
+    fontWeight: "500",
+  },
+  categoryTag: {
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  categoryText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  deleteButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#fef2f2",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  deleteIcon: {
+    fontSize: 18,
+    color: "#ef4444",
+    fontWeight: "bold",
   },
   addButton: {
-    backgroundColor: "#009bba",
-    borderRadius: 8,
-    paddingVertical: 12,
+    position: "absolute",
+    bottom: 20,
+    left: 16,
+    right: 16,
+    backgroundColor: "#3949ab",
+    borderRadius: 16,
+    paddingVertical: 16,
     alignItems: "center",
-    marginTop: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
   addButtonText: {
     color: "#fff",
-    fontWeight: "bold",
+    fontWeight: "700",
     fontSize: 16,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
   },
   modalContent: {
-    width: "85%",
     backgroundColor: "#fff",
-    borderRadius: 16,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 8,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     padding: 20,
-    alignItems: "stretch",
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
   },
   modalTitle: {
     fontSize: 20,
+    fontWeight: "700",
+    color: "#1f2937",
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#f1f5f9",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  closeButtonText: {
+    fontSize: 20,
+    color: "#6b7280",
     fontWeight: "bold",
-    marginBottom: 16,
-    alignSelf: "center",
+  },
+  modalForm: {
+    padding: 20,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 8,
+    marginTop: 12,
   },
   input: {
-    borderWidth: 1,
-    borderColor: "#bbb",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderWidth: 2,
+    borderColor: "#e5e7eb",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     fontSize: 16,
-    backgroundColor: "#f5f5f5",
-    marginBottom: 12,
+    backgroundColor: "#fff",
   },
-  pickerWrapper: {
-    flex: 1,
-    height: 48,
-    borderWidth: 1,
-    borderColor: "#bbb",
-    borderRadius: 8,
-    backgroundColor: "#f5f5f5",
-    marginBottom: 12,
-    justifyContent: "center",
+  modalActions: {
+    padding: 20,
+    gap: 12,
   },
-  pickerButton: {
-    height: 48,
-    flexDirection: "row",
+  saveButton: {
+    backgroundColor: "#3949ab",
+    borderRadius: 12,
+    paddingVertical: 14,
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
   },
-  pickerButtonText: {
-    fontSize: 16,
-    color: "#333",
-  },
-  pickerArrow: {
-    fontSize: 12,
-    color: "#666",
-  },
-  hiddenPicker: {
-    position: "absolute",
-    width: "100%",
-    height: 48,
-    opacity: 0,
-  },
-  modalButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-  },
-  modalButton: {
-    flex: 1,
-    backgroundColor: "#009bba",
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: "center",
-    marginHorizontal: 4,
-  },
-  modalButtonText: {
+  saveButtonText: {
     color: "#fff",
-    fontWeight: "bold",
+    fontWeight: "700",
     fontSize: 16,
   },
-  errorText: {
-    color: "#d32f2f",
-    fontSize: 13,
-    marginBottom: 6,
-    marginLeft: 2,
+  cancelButton: {
+    backgroundColor: "#f1f5f9",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  cancelButtonText: {
+    color: "#6b7280",
+    fontWeight: "600",
+    fontSize: 16,
   },
 });
 

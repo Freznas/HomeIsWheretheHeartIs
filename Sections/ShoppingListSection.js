@@ -1,40 +1,80 @@
-import {Text, StyleSheet, TouchableOpacity } from "react-native";
+import React from "react";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 
 export default function ShoppingListSection({ navigation }) {
   return (
     <TouchableOpacity
       activeOpacity={0.85}
       onPress={() => navigation && navigation.navigate("ShoppingListPage")}
-      style={styles.section}
+      style={styles.card}
     >
-      <Text style={styles.sectionTitle}>Inköpslista</Text>
-      <Text style={styles.text}>🥛 Mjölk (tar slut snart)</Text>
-      <Text style={styles.text}>🍞 Bröd (1 paket kvar)</Text>
+      <View style={styles.header}>
+        <Text style={styles.icon}>🛒</Text>
+        <Text style={styles.title}>Inköpslista</Text>
+      </View>
+      <View style={styles.content}>
+        <Text style={styles.itemCount}>8 varor</Text>
+        <Text style={styles.nextItem}>Nästa: Bröd</Text>
+      </View>
+      <View style={styles.statusBadge}>
+        <Text style={styles.statusText}>Aktiv</Text>
+      </View>
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
-  section: {
-    marginBottom: 20,
-    backgroundColor: "#f0ffe0ff", 
-    borderRadius: 12,
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
-    elevation: 2,
-    padding: 12,
+    elevation: 4,
+    height: 140,
   },
-  sectionTitle: {
-       fontSize: 18,
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  icon: {
+    fontSize: 18,
+    marginRight: 8,
+  },
+  title: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+  },
+  content: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  itemCount: {
+    fontSize: 20,
     fontWeight: "bold",
-    marginBottom: 8,
-  
+    color: "#2196f3",
+    marginBottom: 4,
   },
-  text: {
-    fontSize: 16,
-    marginTop: 4,
+  nextItem: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 12,
+  },
+  statusBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#e3f2fd",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#2196f3",
   },
 });
 

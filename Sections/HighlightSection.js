@@ -1,63 +1,66 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 
 export default function HighlightSection() {
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Highlights</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={[styles.card, styles.birthday]}>
-          <Text style={styles.cardText}>🎂 Mamma fyller år idag!</Text>
-        </View>
-        <View style={[styles.card, styles.dinner]}>
-          <Text style={styles.cardText}>🍽️ Middag kl 18:00</Text>
-        </View>
-        <View style={[styles.card, styles.cleaning]}>
-          <Text style={styles.cardText}>🧹 Städning imorgon</Text>
-        </View>
-        {/* Add more cards as needed */}
-      </ScrollView>
+    <View style={styles.card}>
+      <View style={styles.header}>
+        <Text style={styles.icon}>✨</Text>
+        <Text style={styles.title}>Dagens Höjdpunkt</Text>
+      </View>
+      <Text style={styles.content}>
+        Familjelunch kl 13:00 - Mormor kommer på besök!
+      </Text>
+      <View style={styles.badge}>
+        <Text style={styles.badgeText}>Idag</Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  section: {
-    marginBottom: 20,
-    height: 250,
-    paddingTop: 15, // Add this
-    paddingBottom: 15, // And this
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 8,
-  },
   card: {
     backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 16,
-    marginRight: 12,
-    elevation: 2,
-    minWidth: 200,
-    maxWidth:200,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000", 
-    shadowOffset: { width: 0, height: 2 },
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 8,
+    elevation: 6,
+    marginBottom: 4,
   },
-  birthday: {
-    backgroundColor: "#ffe0e6",
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
   },
-  dinner: {
-    backgroundColor: "#fff9c4",
+  icon: {
+    fontSize: 24,
+    marginRight: 12,
   },
-  cleaning: {
-    backgroundColor: "#e0f7fa",
+  title: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    flex: 1,
   },
-  cardText: {
+  content: {
     fontSize: 16,
+    color: "#666",
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  badge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#e3f2fd",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#1976d2",
   },
 });
