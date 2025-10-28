@@ -12,30 +12,29 @@ import {
   TextInput,
   KeyboardAvoidingView,
 } from "react-native";
-
-const initialItems = [
-  { id: "1", name: "Mjölk", quantity: "2L", completed: false, category: "Mejeri" },
-  { id: "2", name: "Bröd", quantity: "1 st", completed: false, category: "Bageri" },
-  { id: "3", name: "Äpplen", quantity: "1 kg", completed: true, category: "Frukt" },
-  { id: "4", name: "Pasta", quantity: "2 paket", completed: false, category: "Torrvaror" },
-];
+import { useShoppingListData } from '../hooks/useAsyncStorage';
 
 export default function ShoppingListPage({ navigation }) {
-  const [items, setItems] = useState(initialItems);
+  // 💾 AsyncStorage hook - hanterar all data automatiskt
+  const [items, setItems, removeShoppingListData, loading] = useShoppingListData();
   const [modalVisible, setModalVisible] = useState(false);
   const [newItemName, setNewItemName] = useState("");
   const [newItemQuantity, setNewItemQuantity] = useState("");
 
   const toggleComplete = (id) => {
-    setItems(items.map(item => 
-      item.id === id ? { ...item, completed: !item.completed } : item
-    ));
+    // 🔄 Uppdatera completed status (sparas automatiskt till AsyncStorage)
+    setItems(currentItems => 
+      currentItems.map(item => 
+        item.id === id ? { ...item, completed: !item.completed } : item
+      )
+    );
   };
 
   const addItem = () => {
     if (newItemName.trim()) {
-      setItems([
-        ...items,
+      // ➕ Lägg till ny vara (sparas automatiskt till AsyncStorage)
+      setItems(currentItems => [
+        ...currentItems,
         {
           id: Date.now().toString(),
           name: newItemName.trim(),
@@ -51,7 +50,8 @@ export default function ShoppingListPage({ navigation }) {
   };
 
   const deleteItem = (id) => {
-    setItems(items.filter(item => item.id !== id));
+    // 🗑️ Ta bort vara (sparas automatiskt till AsyncStorage)
+    setItems(currentItems => currentItems.filter(item => item.id !== id));
   };
 
   const renderItem = ({ item }) => (
@@ -82,7 +82,17 @@ export default function ShoppingListPage({ navigation }) {
     </View>
   );
 
-  const completedCount = items.filter(item => item.completed).length;
+  // Loading state
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text>Laddar inköpslista...</Text>
+      </View>
+    );
+  }
+
+  const completedCount = (items || []).filter(item => item.completed).length;
+  const totalCount = (items || []).length;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -98,7 +108,7 @@ export default function ShoppingListPage({ navigation }) {
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Inköpslista</Text>
           <Text style={styles.headerSubtitle}>
-            {completedCount}/{items.length} klara
+            {completedCount}/{totalCount} klara
           </Text>
         </View>
         <TouchableOpacity 

@@ -1,14 +1,10 @@
 import React, { useState } from "react";
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, Modal, TextInput, KeyboardAvoidingView, Platform } from "react-native";
-
-const initialNotesList = [
-  { id: "1", title: "Handla mat", content: "Glöm inte mjölk, bröd och ägg från ICA" },
-  { id: "2", title: "Städning", content: "Dammsuga vardagsrummet och sovrummet" },
-  { id: "3", title: "Läkarbesök", content: "Ring och boka tid hos tandläkaren för Anna" },
-];
+import { useNotesData } from '../hooks/useAsyncStorage';
 
 export default function NotesPage({ navigation }) {
-  const [notesList, setNotesList] = useState(initialNotesList);
+  // 💾 AsyncStorage hook - hanterar all data automatiskt
+  const [notesList, setNotesList, removeNotesData, loading] = useNotesData();
   const [modalVisible, setModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [newTitle, setNewTitle] = useState("");
@@ -50,22 +46,24 @@ export default function NotesPage({ navigation }) {
     if (Object.keys(newErrors).length > 0) return;
 
     if (editingItem) {
-      // Update existing item
-      setNotesList(notesList.map(item => 
-        item.id === editingItem.id 
-          ? {
-              ...item,
-              title: newTitle.trim(),
-              content: newContent.trim(),
-            }
-          : item
-      ));
+      // 🔄 Uppdatera befintlig anteckning (sparas automatiskt till AsyncStorage)
+      setNotesList(currentNotes => 
+        currentNotes.map(item => 
+          item.id === editingItem.id 
+            ? {
+                ...item,
+                title: newTitle.trim(),
+                content: newContent.trim(),
+              }
+            : item
+        )
+      );
     } else {
-      // Add new item
-      setNotesList([
-        ...notesList,
+      // ➕ Lägg till ny anteckning (sparas automatiskt till AsyncStorage)
+      setNotesList(currentNotes => [
+        ...currentNotes,
         {
-          id: (notesList.length + 1).toString(),
+          id: Date.now().toString(),
           title: newTitle.trim(),
           content: newContent.trim(),
         },
@@ -81,7 +79,8 @@ export default function NotesPage({ navigation }) {
 
   const handleDelete = () => {
     if (editingItem) {
-      setNotesList(notesList.filter(item => item.id !== editingItem.id));
+      // 🗑️ Ta bort anteckning (sparas automatiskt till AsyncStorage)
+      setNotesList(currentNotes => currentNotes.filter(item => item.id !== editingItem.id));
       setModalVisible(false);
       setEditingItem(null);
       setNewTitle("");
@@ -89,6 +88,15 @@ export default function NotesPage({ navigation }) {
       setErrors({});
     }
   };
+
+  // Loading state
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text>Laddar anteckningar...</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>

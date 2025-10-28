@@ -11,30 +11,27 @@ import {
   Modal,
   TextInput,
 } from "react-native";
-
-const initialChores = [
-  { id: "1", task: "Diska", assignedTo: "Anna", completed: false, dueDate: "Idag" },
-  { id: "2", task: "Dammsuga", assignedTo: "Erik", completed: true, dueDate: "Igår" },
-  { id: "3", task: "Tvätta", assignedTo: "Lisa", completed: false, dueDate: "Imorgon" },
-  { id: "4", task: "Handla mat", assignedTo: "Per", completed: false, dueDate: "Idag" },
-];
+import { useChoresData } from '../hooks/useAsyncStorage';
 
 export default function ChoresPage({ navigation }) {
-  const [chores, setChores] = useState(initialChores);
+  // 💾 AsyncStorage hook - hanterar all data automatiskt
+  const [chores, setChores, removeChoresData, loading] = useChoresData();
   const [modalVisible, setModalVisible] = useState(false);
   const [newTask, setNewTask] = useState("");
   const [newAssignee, setNewAssignee] = useState("");
 
   const toggleComplete = (id) => {
-    setChores(chores.map(chore => 
-      chore.id === id ? { ...chore, completed: !chore.completed } : chore
-    ));
+    setChores(currentChores =>
+      currentChores.map(chore => 
+        chore.id === id ? { ...chore, completed: !chore.completed } : chore
+      )
+    );
   };
 
   const addChore = () => {
     if (newTask.trim() && newAssignee.trim()) {
-      setChores([
-        ...chores,
+      setChores(currentChores => [
+        ...currentChores,
         {
           id: Date.now().toString(),
           task: newTask.trim(),
@@ -73,6 +70,15 @@ export default function ChoresPage({ navigation }) {
 
   const completedCount = chores.filter(chore => chore.completed).length;
 
+  // Show loading state while data is being fetched
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <Text style={styles.loadingText}>Laddar sysslor...</Text>
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#3949ab" />
@@ -99,13 +105,24 @@ export default function ChoresPage({ navigation }) {
       </View>
 
       <View style={styles.container}>
-        <FlatList
-          data={chores}
-          keyExtractor={item => item.id}
-          renderItem={renderChore}
-          contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
-        />
+        {chores.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>
+              🧹 Inga sysslor ännu!
+            </Text>
+            <Text style={styles.emptyStateSubtext}>
+              Tryck på knappen nedan för att lägga till din första syssla
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={chores}
+            keyExtractor={item => item.id}
+            renderItem={renderChore}
+            contentContainerStyle={styles.listContainer}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
         
         <TouchableOpacity 
           style={styles.addButton} 
@@ -403,6 +420,34 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     fontWeight: "600",
     fontSize: 16,
+  },
+  centerContent: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#6b7280",
+    fontWeight: "500",
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#6b7280",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: "#9ca3af",
+    textAlign: "center",
+    lineHeight: 20,
   },
 });
 

@@ -11,18 +11,10 @@ import {
   SafeAreaView,
   StatusBar,
 } from "react-native";
-
-const initialConversation = [
-  { id: 1, sender: "Anna", text: "Hej! Glöm inte handla mjölk på vägen hem.", timestamp: "10:30" },
-  { id: 2, sender: "Du", text: "Tack för påminnelsen! Ska fixa det.", timestamp: "10:32" },
-  { id: 3, sender: "Anna", text: "Super! 😊", timestamp: "10:33" },
-  { id: 4, sender: "Du", text: "Vill du ha något mer?", timestamp: "10:35" },
-  { id: 5, sender: "Anna", text: "Nej, det räcker. Ses snart!", timestamp: "10:36" },
-  { id: 6, sender: "Erik", text: "Jag kommer hem lite sent idag, börjar laga middag utan mig!", timestamp: "15:45" },
-];
+import { useCommunicationData } from '../hooks/useAsyncStorage';
 
 export default function CommunicationPage({ navigation }) {
-  const [conversation, setConversation] = useState(initialConversation);
+  const [conversation, setConversation, removeCommunicationData, loading] = useCommunicationData();
   const [input, setInput] = useState("");
 
   const handleSend = () => {
@@ -32,18 +24,27 @@ export default function CommunicationPage({ navigation }) {
     const timestamp = `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
     
     const newMessage = {
-      id: conversation.length + 1,
+      id: Date.now(),
       sender: "Du",
       text: input.trim(),
       timestamp: timestamp,
     };
-    setConversation([...conversation, newMessage]);
+    setConversation(currentConversation => [...currentConversation, newMessage]);
     setInput("");
   };
 
   const handleBack = () => {
     navigation.goBack();
   };
+
+  // Show loading state while data is being fetched
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, styles.centerContent]}>
+        <Text style={styles.loadingText}>Laddar konversation...</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -69,24 +70,33 @@ export default function CommunicationPage({ navigation }) {
         contentContainerStyle={styles.messagesContent}
         showsVerticalScrollIndicator={false}
       >
-        {conversation.map(msg => (
-          <View key={msg.id} style={[
-            styles.messageRow,
-            msg.sender === "Du" ? styles.myMessage : styles.otherMessage
-          ]}>
-            <View style={styles.messageHeader}>
-              <Text style={[styles.sender, msg.sender === "Du" && styles.mySender]}>
-                {msg.sender}
-              </Text>
-              <Text style={[styles.timestamp, msg.sender === "Du" && styles.myTimestamp]}>
-                {msg.timestamp}
-              </Text>
-            </View>
-            <Text style={[styles.messageText, msg.sender === "Du" && styles.myMessageText]}>
-              {msg.text}
+        {conversation.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>💬 Ingen konversation ännu!</Text>
+            <Text style={styles.emptyStateSubtext}>
+              Skicka det första meddelandet för att starta konversationen med familjen
             </Text>
           </View>
-        ))}
+        ) : (
+          conversation.map(msg => (
+            <View key={msg.id} style={[
+              styles.messageRow,
+              msg.sender === "Du" ? styles.myMessage : styles.otherMessage
+            ]}>
+              <View style={styles.messageHeader}>
+                <Text style={[styles.sender, msg.sender === "Du" && styles.mySender]}>
+                  {msg.sender}
+                </Text>
+                <Text style={[styles.timestamp, msg.sender === "Du" && styles.myTimestamp]}>
+                  {msg.timestamp}
+                </Text>
+              </View>
+              <Text style={[styles.messageText, msg.sender === "Du" && styles.myMessageText]}>
+                {msg.text}
+              </Text>
+            </View>
+          ))
+        )}
       </ScrollView>
 
       {/* Input Area */}
@@ -290,5 +300,33 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#fff",
     fontWeight: "bold",
+  },
+  centerContent: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#6b7280",
+    fontWeight: "500",
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#6b7280",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: "#9ca3af",
+    textAlign: "center",
+    lineHeight: 20,
   },
 });

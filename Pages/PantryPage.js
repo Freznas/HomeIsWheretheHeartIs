@@ -14,17 +14,14 @@ import {
   ScrollView
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
+import { usePantryData } from '../hooks/useAsyncStorage';
 
-const initialPantry = [
-  { id: "1", name: "Mjölk", quantity: "2", unit: "liter", category: "Mejeri" },
-  { id: "2", name: "Bröd", quantity: "1", unit: "paket", category: "Bageri" },
-  { id: "3", name: "Ägg", quantity: "12", unit: "st", category: "Mejeri" },
-  { id: "4", name: "Pasta", quantity: "3", unit: "paket", category: "Torrvaror" },
-  { id: "5", name: "Tomater", quantity: "5", unit: "st", category: "Grönsaker" },
-];
 
 export default function PantryPage({ navigation }) {
-  const [pantry, setPantry] = useState(initialPantry);
+  // 💾 AsyncStorage hook - hanterar all data automatiskt
+  const [pantryItems, setPantryItems, removePantryData, loading] = usePantryData();
+  
+  // Modal states
   const [modalVisible, setModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [newName, setNewName] = useState("");
@@ -32,16 +29,31 @@ export default function PantryPage({ navigation }) {
   const [newUnit, setNewUnit] = useState("st");
   const [newCategory, setNewCategory] = useState("");
   const [errors, setErrors] = useState({});
-
-  // Gruppera items per kategori
-  const groupedPantry = pantry.reduce((acc, item) => {
-    if (!acc[item.category]) {
-      acc[item.category] = [];
+  // Gruppera items per kategori från AsyncStorage data
+  const groupedPantry = (pantryItems || []).reduce((acc, item) => {
+    const category = item.category || "Okategoriserat";
+    if (!acc[category]) {
+      acc[category] = [];
     }
-    acc[item.category].push(item);
+    acc[category].push(item);
     return acc;
   }, {});
 
+ if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text>Laddar skafferidata...</Text>
+      </View>
+    );
+  }
+
+
+
+
+
+
+
+  
   const renderItem = ({ item }) => (
     <TouchableOpacity 
       style={styles.itemCard} 
@@ -119,20 +131,24 @@ export default function PantryPage({ navigation }) {
     if (Object.keys(newErrors).length > 0) return;
 
     if (editingItem) {
-      setPantry(pantry.map(item => 
-        item.id === editingItem.id 
-          ? {
-              ...item,
-              name: newName.trim(),
-              quantity: newQuantity.trim(),
-              unit: newUnit,
-              category: newCategory.trim(),
-            }
-          : item
-      ));
+      // 🔄 Uppdatera befintlig vara (sparas automatiskt till AsyncStorage)
+      setPantryItems(currentItems => 
+        currentItems.map(item => 
+          item.id === editingItem.id 
+            ? {
+                ...item,
+                name: newName.trim(),
+                quantity: newQuantity.trim(),
+                unit: newUnit,
+                category: newCategory.trim(),
+              }
+            : item
+        )
+      );
     } else {
-      setPantry([
-        ...pantry,
+      // ➕ Lägg till ny vara (sparas automatiskt till AsyncStorage)
+      setPantryItems(currentItems => [
+        ...currentItems,
         {
           id: Date.now().toString(),
           name: newName.trim(),
@@ -148,7 +164,10 @@ export default function PantryPage({ navigation }) {
 
   const handleDelete = () => {
     if (editingItem) {
-      setPantry(pantry.filter(item => item.id !== editingItem.id));
+      // 🗑️ Ta bort vara (sparas automatiskt till AsyncStorage)
+      setPantryItems(currentItems => 
+        currentItems.filter(item => item.id !== editingItem.id)
+      );
       resetModal();
     }
   };
@@ -177,7 +196,7 @@ export default function PantryPage({ navigation }) {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Skafferi</Text>
-          <Text style={styles.headerSubtitle}>{pantry.length} varor totalt</Text>
+          <Text style={styles.headerSubtitle}>{(pantryItems || []).length} varor totalt</Text>
         </View>
         <TouchableOpacity style={styles.addHeaderButton} onPress={openAddModal}>
           <Text style={styles.addHeaderIcon}>+</Text>
@@ -185,13 +204,23 @@ export default function PantryPage({ navigation }) {
       </View>
 
       <View style={styles.container}>
-        <FlatList
-          data={Object.keys(groupedPantry)}
-          keyExtractor={item => item}
-          renderItem={renderCategory}
-          contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
-        />
+        {Object.keys(groupedPantry).length > 0 ? (
+          <FlatList
+            data={Object.keys(groupedPantry)}
+            keyExtractor={item => item}
+            renderItem={renderCategory}
+            contentContainerStyle={styles.listContainer}
+            showsVerticalScrollIndicator={false}
+          />
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyIcon}>🥫</Text>
+            <Text style={styles.emptyTitle}>Tomt skafferi</Text>
+            <Text style={styles.emptyMessage}>
+              Ditt skafferi är tomt! Tryck på knappen nedan för att lägga till dina första varor.
+            </Text>
+          </View>
+        )}
         
         <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
           <Text style={styles.addButtonText}>+ Lägg till vara</Text>
@@ -601,6 +630,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
     fontWeight: "500",
+  },
+  // Tom lista styles
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 40,
+    paddingBottom: 100,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 20,
+  },
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#1f2937",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  emptyMessage: {
+    fontSize: 16,
+    color: "#6b7280",
+    textAlign: "center",
+    lineHeight: 24,
   },
 });
 

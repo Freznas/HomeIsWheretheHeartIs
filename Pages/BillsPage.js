@@ -1,15 +1,11 @@
 import React, { useState } from "react";
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, Modal, TextInput, KeyboardAvoidingView, Platform } from "react-native";
 import { Picker } from "@react-native-picker/picker";
-
-const initialBills = [
-  { id: "1", name: "Elräkning", amount: "1200", dueDate: "2025-10-15", status: "Ej betald" },
-  { id: "2", name: "Interneträkning", amount: "450", dueDate: "2025-10-20", status: "Betald" },
-  { id: "3", name: "Hyra", amount: "8500", dueDate: "2025-11-01", status: "Ej betald" },
-];
+import { useBillsData } from '../hooks/useAsyncStorage';
 
 export default function BillsPage({ navigation }) {
-  const [bills, setBills] = useState(initialBills);
+  // 💾 AsyncStorage hook - hanterar all data automatiskt
+  const [bills, setBills, removeBillsData, loading] = useBillsData();
   const [modalVisible, setModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [newName, setNewName] = useState("");
@@ -60,24 +56,26 @@ export default function BillsPage({ navigation }) {
     if (Object.keys(newErrors).length > 0) return;
 
     if (editingItem) {
-      // Update existing item
-      setBills(bills.map(item => 
-        item.id === editingItem.id 
-          ? {
-              ...item,
-              name: newName.trim(),
-              amount: newAmount.trim(),
-              dueDate: newDueDate.trim(),
-              status: newStatus,
-            }
-          : item
-      ));
+      // 🔄 Uppdatera befintlig räkning (sparas automatiskt till AsyncStorage)
+      setBills(currentBills => 
+        currentBills.map(item => 
+          item.id === editingItem.id 
+            ? {
+                ...item,
+                name: newName.trim(),
+                amount: newAmount.trim(),
+                dueDate: newDueDate.trim(),
+                status: newStatus,
+              }
+            : item
+        )
+      );
     } else {
-      // Add new item
-      setBills([
-        ...bills,
+      // ➕ Lägg till ny räkning (sparas automatiskt till AsyncStorage)
+      setBills(currentBills => [
+        ...currentBills,
         {
-          id: (bills.length + 1).toString(),
+          id: Date.now().toString(),
           name: newName.trim(),
           amount: newAmount.trim(),
           dueDate: newDueDate.trim(),
@@ -97,7 +95,8 @@ export default function BillsPage({ navigation }) {
 
   const handleDelete = () => {
     if (editingItem) {
-      setBills(bills.filter(item => item.id !== editingItem.id));
+      // 🗑️ Ta bort räkning (sparas automatiskt till AsyncStorage)
+      setBills(currentBills => currentBills.filter(item => item.id !== editingItem.id));
       setModalVisible(false);
       setEditingItem(null);
       setNewName("");
@@ -107,6 +106,15 @@ export default function BillsPage({ navigation }) {
       setErrors({});
     }
   };
+
+  // Loading state
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text>Laddar räkningar...</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
