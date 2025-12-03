@@ -1,25 +1,30 @@
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { useTheme } from '../context/ThemeContext';
 
-export default function CalendarSection() {
+export default function CalendarSection({ navigation }) {
+  const { theme } = useTheme();
   return (
-    <TouchableOpacity style={styles.card} activeOpacity={0.8}>
+    <TouchableOpacity 
+      style={[styles.card, { backgroundColor: theme.cardBackground, shadowColor: theme.shadow }]} 
+      activeOpacity={0.8}
+      onPress={() => navigation?.navigate("CalendarPage")}
+    >
       <View style={styles.header}>
         <Text style={styles.icon}>📅</Text>
-        <Text style={styles.title}>Kalender</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Kalender</Text>
       </View>
       <View style={styles.dateContainer}>
-        <Text style={styles.day}>7</Text>
-        <Text style={styles.month}>Okt</Text>
+        <Text style={[styles.day, { color: theme.primary }]}>7</Text>
+        <Text style={[styles.month, { color: theme.textSecondary }]}>Okt</Text>
       </View>
-      <Text style={styles.eventCount}>3 händelser</Text>
+      <Text style={[styles.eventCount, { color: theme.textTertiary }]}>3 händelser</Text>
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#fff",
     borderRadius: 16,
     padding: 16,
     shadowColor: "#000",

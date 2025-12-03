@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   StatusBar,
   FlatList,
@@ -11,15 +10,30 @@ import {
   Modal,
   TextInput,
   KeyboardAvoidingView,
+  ScrollView,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Picker } from "@react-native-picker/picker";
 import { useShoppingListData } from '../hooks/useAsyncStorage';
+import { useTheme } from '../context/ThemeContext';
 
 export default function ShoppingListPage({ navigation }) {
+  const { theme } = useTheme();
   // 💾 AsyncStorage hook - hanterar all data automatiskt
-  const [items, setItems, removeShoppingListData, loading] = useShoppingListData();
+  const [items, setItems, removeShoppingData, loading] = useShoppingListData();
   const [modalVisible, setModalVisible] = useState(false);
   const [newItemName, setNewItemName] = useState("");
   const [newItemQuantity, setNewItemQuantity] = useState("");
+  const [newItemUnit, setNewItemUnit] = useState("st");
+  const [showUnitPicker, setShowUnitPicker] = useState(false);
+  
+  const units = [
+    { label: 'st', value: 'st', icon: '📦' },
+    { label: 'kg', value: 'kg', icon: '⚖️' },
+    { label: 'liter', value: 'liter', icon: '🧃' },
+    { label: 'paket', value: 'paket', icon: '🎁' },
+    { label: 'burk', value: 'burk', icon: '🥫' },
+  ];
 
   const toggleComplete = (id) => {
     // 🔄 Uppdatera completed status (sparas automatiskt till AsyncStorage)
@@ -32,19 +46,24 @@ export default function ShoppingListPage({ navigation }) {
 
   const addItem = () => {
     if (newItemName.trim()) {
-      // ➕ Lägg till ny vara (sparas automatiskt till AsyncStorage)
+      const quantityText = newItemQuantity.trim() || "1";
+      const quantityString = `${quantityText} ${newItemUnit}`;
+      
+      // ➞ Lägg till ny vara (sparas automatiskt till AsyncStorage)
       setItems(currentItems => [
         ...currentItems,
         {
           id: Date.now().toString(),
           name: newItemName.trim(),
-          quantity: newItemQuantity.trim() || "1 st",
+          quantity: quantityString,
           completed: false,
           category: "Övrigt"
         }
       ]);
       setNewItemName("");
       setNewItemQuantity("");
+      setNewItemUnit("st");
+      setShowUnitPicker(false);
       setModalVisible(false);
     }
   };
@@ -55,22 +74,22 @@ export default function ShoppingListPage({ navigation }) {
   };
 
   const renderItem = ({ item }) => (
-    <View style={[styles.itemCard, item.completed && styles.completedItem]}>
+    <View style={[styles.itemCard, { backgroundColor: theme.cardBackground, shadowColor: theme.shadowColor, borderColor: theme.border }, item.completed && styles.completedItem]}>
       <TouchableOpacity 
         style={styles.itemContent}
         onPress={() => toggleComplete(item.id)}
       >
-        <View style={[styles.checkbox, item.completed && styles.checkedBox]}>
-          <Text style={styles.checkmark}>{item.completed ? "✓" : ""}</Text>
+        <View style={[styles.checkbox, { borderColor: theme.border }, item.completed && { backgroundColor: theme.success }]}>
+          <Text style={[styles.checkmark, { color: theme.textInverse }]}>{item.completed ? "✓" : ""}</Text>
         </View>
         <View style={styles.itemDetails}>
-          <Text style={[styles.itemName, item.completed && styles.completedText]}>
+          <Text style={[styles.itemName, { color: theme.text }, item.completed && styles.completedText]}>
             {item.name}
           </Text>
-          <Text style={styles.itemQuantity}>{item.quantity}</Text>
+          <Text style={[styles.itemQuantity, { color: theme.textSecondary }]}>{item.quantity}</Text>
         </View>
-        <View style={styles.categoryTag}>
-          <Text style={styles.categoryText}>{item.category}</Text>
+        <View style={[styles.categoryTag, { backgroundColor: theme.accent }]}>
+          <Text style={[styles.categoryText, { color: theme.textInverse }]}>{item.category}</Text>
         </View>
       </TouchableOpacity>
       <TouchableOpacity 
@@ -96,18 +115,18 @@ export default function ShoppingListPage({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#3949ab" />
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.headerBackground} />
       
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: theme.headerBackground }]}>
         <TouchableOpacity 
           style={styles.backButton} 
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backIcon}>←</Text>
+          <Text style={[styles.backIcon, { color: theme.headerText }]}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Inköpslista</Text>
-          <Text style={styles.headerSubtitle}>
+          <Text style={[styles.headerTitle, { color: theme.headerText }]}>Inköpslista</Text>
+          <Text style={[styles.headerSubtitle, { color: theme.headerText, opacity: 0.8 }]}>
             {completedCount}/{totalCount} klara
           </Text>
         </View>
@@ -119,7 +138,7 @@ export default function ShoppingListPage({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
         <FlatList
           data={items}
           keyExtractor={item => item.id}
@@ -146,44 +165,93 @@ export default function ShoppingListPage({ navigation }) {
           style={styles.modalOverlay}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: theme.modalBackground }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Lägg till vara</Text>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Lägg till vara</Text>
               <TouchableOpacity 
                 onPress={() => setModalVisible(false)} 
                 style={styles.closeButton}
               >
-                <Text style={styles.closeButtonText}>×</Text>
+                <Text style={[styles.closeButtonText, { color: theme.text }]}>×</Text>
               </TouchableOpacity>
             </View>
             
             <View style={styles.modalForm}>
-              <Text style={styles.inputLabel}>Produktnamn</Text>
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Produktnamn</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text, borderColor: theme.border }]}
                 placeholder="T.ex. Mjölk, Bröd..."
+                placeholderTextColor={theme.textSecondary}
                 value={newItemName}
                 onChangeText={setNewItemName}
               />
               
-              <Text style={styles.inputLabel}>Mängd (valfritt)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="T.ex. 2L, 1 kg..."
-                value={newItemQuantity}
-                onChangeText={setNewItemQuantity}
-              />
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Mängd & Enhet</Text>
+              <View style={styles.rowInputs}>
+                <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text, borderColor: theme.border }]}
+                    placeholder="Antal"
+                    placeholderTextColor={theme.textSecondary}
+                    value={newItemQuantity}
+                    onChangeText={setNewItemQuantity}
+                    keyboardType="numeric"
+                  />
+                </View>
+                
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                  <TouchableOpacity
+                    style={[styles.unitPickerButton, { backgroundColor: theme.inputBackground, borderColor: theme.border }]}
+                    onPress={() => setShowUnitPicker(!showUnitPicker)}
+                  >
+                    <Text style={[styles.unitPickerText, { color: theme.text }]}>
+                      {units.find(u => u.value === newItemUnit)?.icon} {newItemUnit}
+                    </Text>
+                    <Text style={styles.dropdownArrow}>{showUnitPicker ? '▲' : '▼'}</Text>
+                  </TouchableOpacity>
+                  
+                  {showUnitPicker && (
+                    <ScrollView 
+                      style={[styles.unitScrollList, { backgroundColor: theme.card, borderColor: theme.border }]}
+                      nestedScrollEnabled={true}
+                      showsVerticalScrollIndicator={true}
+                    >
+                      {units.map((unit, index) => (
+                        <TouchableOpacity
+                          key={unit.value}
+                          style={[
+                            styles.unitOption,
+                            newItemUnit === unit.value && styles.unitOptionActive,
+                            index !== units.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border }
+                          ]}
+                          onPress={() => {
+                            setNewItemUnit(unit.value);
+                            setShowUnitPicker(false);
+                          }}
+                        >
+                          <Text style={[styles.unitOptionText, { color: theme.text }]}>
+                            {unit.icon} {unit.label}
+                          </Text>
+                          {newItemUnit === unit.value && (
+                            <Text style={styles.checkIcon}>✓</Text>
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  )}
+                </View>
+              </View>
             </View>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.saveButton} onPress={addItem}>
-                <Text style={styles.saveButtonText}>Lägg till</Text>
+              <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.success }]} onPress={addItem}>
+                <Text style={[styles.saveButtonText, { color: theme.textInverse }]}>Lägg till</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={styles.cancelButton} 
+                style={[styles.cancelButton, { borderColor: theme.border }]} 
                 onPress={() => setModalVisible(false)}
               >
-                <Text style={styles.cancelButtonText}>Avbryt</Text>
+                <Text style={[styles.cancelButtonText, { color: theme.text }]}>Avbryt</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -372,6 +440,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 8,
+    minHeight: "70%",
   },
   modalHeader: {
     flexDirection: "row",
@@ -444,6 +513,67 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     fontWeight: "600",
     fontSize: 16,
+  },
+  rowInputs: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  inputGroup: {
+    position: 'relative',
+  },
+  unitPickerButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 48,
+  },
+  unitPickerText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  dropdownArrow: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  unitScrollList: {
+    position: 'absolute',
+    top: 52,
+    left: 0,
+    right: 0,
+    maxHeight: 180,
+    borderWidth: 2,
+    borderRadius: 12,
+    marginTop: 4,
+    zIndex: 1000,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    overflow: 'hidden',
+  },
+  unitOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+  },
+  unitOptionActive: {
+    backgroundColor: 'rgba(57, 73, 171, 0.1)',
+  },
+  unitOptionText: {
+    fontSize: 16,
+  },
+  checkIcon: {
+    fontSize: 18,
+    color: '#3949ab',
+    fontWeight: 'bold',
   },
 });
 

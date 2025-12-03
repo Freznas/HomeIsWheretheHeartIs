@@ -61,3 +61,4 @@ export const useBillsData = () => useAsyncStorage('bills', []);
 export const useNotesData = () => useAsyncStorage('notes', []);
 export const useVisitorsData = () => useAsyncStorage('visitors', []);
 export const useCommunicationData = () => useAsyncStorage('communication', []);
+export const useCalendarData = () => useAsyncStorage('calendar', []);

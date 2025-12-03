@@ -13,14 +13,30 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCalendarsUsageDescription": "Denna app behöver åtkomst till din kalender för att synkronisera familjehändelser med din telefonkalender.",
+        "NSLocationWhenInUseUsageDescription": "Denna app behöver din plats för att visa aktuell väderinformation för din område.",
+        "NSContactsUsageDescription": "Denna app behöver åtkomst till dina kontakter för att enkelt lägga till besökares information.",
+        "NSUserNotificationsUsageDescription": "Denna app behöver skicka notifikationer för att påminna dig om viktiga händelser, besökare, räkningar och sysslor."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "READ_CALENDAR",
+        "WRITE_CALENDAR",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "READ_CONTACTS",
+        "POST_NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

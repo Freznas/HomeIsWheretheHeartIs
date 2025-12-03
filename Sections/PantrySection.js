@@ -1,23 +1,25 @@
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { useTheme } from '../context/ThemeContext';
 
 export default function PantrySection({ navigation }) {
+  const { theme } = useTheme();
   return (
     <TouchableOpacity 
-      style={styles.card} 
+      style={[styles.card, { backgroundColor: theme.cardBackground, shadowColor: theme.shadowColor }]} 
       activeOpacity={0.8}
       onPress={() => navigation.navigate("PantryPage")}
     >
       <View style={styles.header}>
         <Text style={styles.icon}>🥫</Text>
-        <Text style={styles.title}>Skafferi</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Skafferi</Text>
       </View>
       <View style={styles.content}>
-        <Text style={styles.itemCount}>12 varor</Text>
-        <Text style={styles.recentItem}>Senast: Mjölk</Text>
+        <Text style={[styles.itemCount, { color: theme.primary }]}>12 varor</Text>
+        <Text style={[styles.recentItem, { color: theme.textSecondary }]}>Senast: Mjölk</Text>
       </View>
-      <View style={styles.statusBadge}>
-        <Text style={styles.statusText}>Uppdaterad</Text>
+      <View style={[styles.statusBadge, { backgroundColor: theme.primary + '20' }]}>
+        <Text style={[styles.statusText, { color: theme.primary }]}>Uppdaterad</Text>
       </View>
     </TouchableOpacity>
   );

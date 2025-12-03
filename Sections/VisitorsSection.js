@@ -1,27 +1,115 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { useTheme } from '../context/ThemeContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
+
+const STORAGE_KEY = '@visitors';
 
 export default function VisitorsSection({ navigation }) {
+  const { theme } = useTheme();
+  const [visitors, setVisitors] = useState([]);
+  const [nextVisitor, setNextVisitor] = useState(null);
+
+  const loadVisitors = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const allVisitors = JSON.parse(stored);
+        setVisitors(allVisitors);
+        
+        // Hitta nästa besökare (dagens eller framtida besök)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const upcoming = allVisitors
+          .filter(v => v.date)
+          .map(v => ({
+            ...v,
+            dateObj: new Date(v.date),
+          }))
+          .filter(v => v.dateObj >= today)
+          .sort((a, b) => a.dateObj - b.dateObj);
+        
+        if (upcoming.length > 0) {
+          setNextVisitor(upcoming[0]);
+        } else {
+          setNextVisitor(null);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading visitors:', error);
+    }
+  };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadVisitors();
+    }, [])
+  );
+
+  const formatDate = (dateStr) => {
+    const date = new Date(dateStr);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const visitDate = new Date(date);
+    visitDate.setHours(0, 0, 0, 0);
+
+    if (visitDate.getTime() === today.getTime()) {
+      return 'Idag';
+    }
+
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    if (visitDate.getTime() === tomorrow.getTime()) {
+      return 'Imorgon';
+    }
+
+    return date.toLocaleDateString('sv-SE', { month: 'short', day: 'numeric' });
+  };
+
   return (
     <TouchableOpacity 
-      style={styles.card} 
+      style={[styles.card, { backgroundColor: theme.cardBackground, shadowColor: theme.shadow }]} 
       activeOpacity={0.8}
-      onPress={() => {
-        console.log("VisitorsSection pressed, navigation:", !!navigation);
-        navigation?.navigate("VisitorsPage");
-      }}
+      onPress={() => navigation?.navigate("VisitorsPage")}
     >
       <View style={styles.header}>
         <Text style={styles.icon}>👥</Text>
-        <Text style={styles.title}>Besökare</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Besökare</Text>
       </View>
       <View style={styles.content}>
-        <Text style={styles.itemCount}>2 besökare</Text>
-        <Text style={styles.nextVisitor}>Nästa: Mormor 13:00</Text>
+        {visitors.length > 0 ? (
+          <>
+            <Text style={[styles.itemCount, { color: theme.primary }]}>
+              {visitors.length} {visitors.length === 1 ? 'besökare' : 'besökare'}
+            </Text>
+            {nextVisitor ? (
+              <Text style={[styles.nextVisitor, { color: theme.textSecondary }]} numberOfLines={1}>
+                Nästa: {nextVisitor.name} {nextVisitor.time && `kl ${nextVisitor.time}`}
+              </Text>
+            ) : (
+              <Text style={[styles.nextVisitor, { color: theme.textSecondary }]}>
+                Inga planerade besök
+              </Text>
+            )}
+          </>
+        ) : (
+          <>
+            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Inga besökare</Text>
+            <Text style={[styles.emptySubtext, { color: theme.textTertiary }]}>
+              Tryck för att lägga till
+            </Text>
+          </>
+        )}
       </View>
-      <View style={styles.statusBadge}>
-        <Text style={styles.statusText}>Idag</Text>
-      </View>
+      {nextVisitor && (
+        <View style={[styles.statusBadge, { backgroundColor: theme.primary + '20' }]}>
+          <Text style={[styles.statusText, { color: theme.primary }]}>
+            {formatDate(nextVisitor.date)}
+          </Text>
+        </View>
+      )}
     </TouchableOpacity>
   );
 }
@@ -78,5 +166,13 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "600",
     color: "#9c27b0",
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  emptySubtext: {
+    fontSize: 12,
   },
 });

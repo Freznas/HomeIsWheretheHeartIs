@@ -1,23 +1,25 @@
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { useTheme } from '../context/ThemeContext';
 
 export default function ShoppingListSection({ navigation }) {
+  const { theme } = useTheme();
   return (
     <TouchableOpacity
       activeOpacity={0.85}
       onPress={() => navigation && navigation.navigate("ShoppingListPage")}
-      style={styles.card}
+      style={[styles.card, { backgroundColor: theme.cardBackground, shadowColor: theme.shadow }]}
     >
       <View style={styles.header}>
         <Text style={styles.icon}>🛒</Text>
-        <Text style={styles.title}>Inköpslista</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Inköpslista</Text>
       </View>
       <View style={styles.content}>
-        <Text style={styles.itemCount}>8 varor</Text>
-        <Text style={styles.nextItem}>Nästa: Bröd</Text>
+        <Text style={[styles.itemCount, { color: theme.accent }]}>8 varor</Text>
+        <Text style={[styles.nextItem, { color: theme.textSecondary }]}>Nästa: Bröd</Text>
       </View>
-      <View style={styles.statusBadge}>
-        <Text style={styles.statusText}>Aktiv</Text>
+      <View style={[styles.statusBadge, { backgroundColor: theme.accent + '20' }]}>
+        <Text style={[styles.statusText, { color: theme.accent }]}>Aktiv</Text>
       </View>
     </TouchableOpacity>
   );

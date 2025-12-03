@@ -5,7 +5,6 @@ import {
   StyleSheet, 
   FlatList, 
   TouchableOpacity, 
-  SafeAreaView, 
   Modal, 
   TextInput, 
   KeyboardAvoidingView, 
@@ -13,11 +12,14 @@ import {
   StatusBar,
   ScrollView
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from "@react-native-picker/picker";
 import { usePantryData } from '../hooks/useAsyncStorage';
+import { useTheme } from '../context/ThemeContext';
 
 
 export default function PantryPage({ navigation }) {
+  const { theme } = useTheme();
   // 💾 AsyncStorage hook - hanterar all data automatiskt
   const [pantryItems, setPantryItems, removePantryData, loading] = usePantryData();
   
@@ -29,6 +31,15 @@ export default function PantryPage({ navigation }) {
   const [newUnit, setNewUnit] = useState("st");
   const [newCategory, setNewCategory] = useState("");
   const [errors, setErrors] = useState({});
+  const [showUnitPicker, setShowUnitPicker] = useState(false);
+  
+  const units = [
+    { label: 'st', value: 'st', icon: '📦' },
+    { label: 'kg', value: 'kg', icon: '⚖️' },
+    { label: 'liter', value: 'liter', icon: '🧃' },
+    { label: 'paket', value: 'paket', icon: '🎁' },
+    { label: 'burk', value: 'burk', icon: '🥫' },
+  ];
   // Gruppera items per kategori från AsyncStorage data
   const groupedPantry = (pantryItems || []).reduce((acc, item) => {
     const category = item.category || "Okategoriserat";
@@ -56,14 +67,14 @@ export default function PantryPage({ navigation }) {
   
   const renderItem = ({ item }) => (
     <TouchableOpacity 
-      style={styles.itemCard} 
+      style={[styles.itemCard, { backgroundColor: theme.cardBackground, shadowColor: theme.shadowColor, borderColor: theme.border }]} 
       onPress={() => openEditModal(item)}
       activeOpacity={0.7}
     >
       <View style={styles.itemHeader}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        <View style={styles.quantityBadge}>
-          <Text style={styles.quantityText}>{item.quantity} {item.unit}</Text>
+        <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
+        <View style={[styles.quantityBadge, { backgroundColor: theme.primary }]}>
+          <Text style={[styles.quantityText, { color: theme.textInverse }]}>{item.quantity + " " + item.unit}</Text>
         </View>
       </View>
       <View style={styles.itemFooter}>
@@ -80,20 +91,20 @@ export default function PantryPage({ navigation }) {
     return (
       <View style={styles.categorySection}>
         <View style={styles.categoryHeader}>
-          <Text style={styles.categoryTitle}>{categoryName}</Text>
-          <Text style={styles.categoryCount}>{items.length} varor</Text>
+          <Text style={[styles.categoryTitle, { color: theme.text }]}>{categoryName}</Text>
+          <Text style={[styles.categoryCount, { color: theme.textSecondary }]}>{items.length} varor</Text>
         </View>
         {items.map((item) => (
           <TouchableOpacity 
             key={item.id}
-            style={styles.itemCard} 
+            style={[styles.itemCard, { backgroundColor: theme.cardBackground, shadowColor: theme.shadowColor, borderColor: theme.border }]} 
             onPress={() => openEditModal(item)}
             activeOpacity={0.7}
           >
             <View style={styles.itemHeader}>
-              <Text style={styles.itemName}>{item.name}</Text>
-              <View style={styles.quantityBadge}>
-                <Text style={styles.quantityText}>{item.quantity} {item.unit}</Text>
+              <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
+              <View style={[styles.quantityBadge, { backgroundColor: theme.primary }]}>
+                <Text style={[styles.quantityText, { color: theme.textInverse }]}>{item.quantity + " " + item.unit}</Text>
               </View>
             </View>
           </TouchableOpacity>
@@ -184,26 +195,26 @@ export default function PantryPage({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#3949ab" />
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.headerBackground} />
       
       {/* Modern Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: theme.headerBackground }]}>
         <TouchableOpacity 
           style={styles.backButton} 
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backIcon}>←</Text>
+          <Text style={[styles.backIcon, { color: theme.headerText }]}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Skafferi</Text>
-          <Text style={styles.headerSubtitle}>{(pantryItems || []).length} varor totalt</Text>
+          <Text style={[styles.headerTitle, { color: theme.headerText }]}>Skafferi</Text>
+          <Text style={[styles.headerSubtitle, { color: theme.headerText, opacity: 0.8 }]}>{(pantryItems || []).length} varor totalt</Text>
         </View>
         <TouchableOpacity style={styles.addHeaderButton} onPress={openAddModal}>
           <Text style={styles.addHeaderIcon}>+</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
         {Object.keys(groupedPantry).length > 0 ? (
           <FlatList
             data={Object.keys(groupedPantry)}
@@ -215,8 +226,8 @@ export default function PantryPage({ navigation }) {
         ) : (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyIcon}>🥫</Text>
-            <Text style={styles.emptyTitle}>Tomt skafferi</Text>
-            <Text style={styles.emptyMessage}>
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>Tomt skafferi</Text>
+            <Text style={[styles.emptyMessage, { color: theme.textSecondary }]}>
               Ditt skafferi är tomt! Tryck på knappen nedan för att lägga till dina första varor.
             </Text>
           </View>
@@ -238,37 +249,39 @@ export default function PantryPage({ navigation }) {
           style={styles.modalOverlay}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: theme.modalBackground }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
                 {editingItem ? "Redigera vara" : "Lägg till vara"}
               </Text>
               <TouchableOpacity onPress={resetModal} style={styles.closeButton}>
-                <Text style={styles.closeButtonText}>×</Text>
+                <Text style={[styles.closeButtonText, { color: theme.text }]}>×</Text>
               </TouchableOpacity>
             </View>
             
             <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false}>
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Produktnamn</Text>
+                <Text style={[styles.inputLabel, { color: theme.text }]}>Produktnamn</Text>
                 <TextInput
-                  style={[styles.input, errors.name && styles.inputError]}
+                  style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text, borderColor: theme.border }, errors.name && styles.inputError]}
                   placeholder="T.ex. Mjölk, Bröd..."
+                  placeholderTextColor={theme.textSecondary}
                   value={newName}
                   onChangeText={text => {
                     setNewName(text);
                     if (errors.name) setErrors({ ...errors, name: undefined });
                   }}
                 />
-                {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
+                {errors.name && <Text style={[styles.errorText, { color: theme.error }]}>{errors.name}</Text>}
               </View>
 
               <View style={styles.rowInputs}>
                 <View style={[styles.inputGroup, { flex: 2, marginRight: 12 }]}>
-                  <Text style={styles.inputLabel}>Mängd</Text>
+                  <Text style={[styles.inputLabel, { color: theme.text }]}>Mängd</Text>
                   <TextInput
-                    style={[styles.input, errors.quantity && styles.inputError]}
+                    style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text, borderColor: theme.border }, errors.quantity && styles.inputError]}
                     placeholder="Antal"
+                    placeholderTextColor={theme.textSecondary}
                     value={newQuantity}
                     onChangeText={text => {
                       const numeric = text.replace(/[^0-9]/g, "");
@@ -277,66 +290,93 @@ export default function PantryPage({ navigation }) {
                     }}
                     keyboardType="numeric"
                   />
-                  {errors.quantity && <Text style={styles.errorText}>{errors.quantity}</Text>}
+                  {errors.quantity && <Text style={[styles.errorText, { color: theme.error }]}>{errors.quantity}</Text>}
                 </View>
                 
                 <View style={[styles.inputGroup, { flex: 1 }]}>
-                  <Text style={styles.inputLabel}>Enhet</Text>
-                  <View style={styles.pickerContainer}>
-                    <Picker
-                      selectedValue={newUnit}
-                      onValueChange={(itemValue) => setNewUnit(itemValue)}
-                      style={styles.picker}
+                  <Text style={[styles.inputLabel, { color: theme.text }]}>Enhet</Text>
+                  <TouchableOpacity
+                    style={[styles.unitPickerButton, { backgroundColor: theme.inputBackground, borderColor: theme.border }]}
+                    onPress={() => setShowUnitPicker(!showUnitPicker)}
+                  >
+                    <Text style={[styles.unitPickerText, { color: theme.text }]}>
+                      {units.find(u => u.value === newUnit)?.icon} {newUnit}
+                    </Text>
+                    <Text style={styles.dropdownArrow}>{showUnitPicker ? '▲' : '▼'}</Text>
+                  </TouchableOpacity>
+                  
+                  {showUnitPicker && (
+                    <ScrollView 
+                      style={[styles.unitScrollList, { backgroundColor: theme.card, borderColor: theme.border }]}
+                      nestedScrollEnabled={true}
+                      showsVerticalScrollIndicator={true}
                     >
-                      <Picker.Item label="st" value="st" />
-                      <Picker.Item label="kg" value="kg" />
-                      <Picker.Item label="liter" value="liter" />
-                      <Picker.Item label="paket" value="paket" />
-                      <Picker.Item label="burk" value="burk" />
-                    </Picker>
-                  </View>
+                      {units.map((unit, index) => (
+                        <TouchableOpacity
+                          key={unit.value}
+                          style={[
+                            styles.unitOption,
+                            newUnit === unit.value && styles.unitOptionActive,
+                            index !== units.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border }
+                          ]}
+                          onPress={() => {
+                            setNewUnit(unit.value);
+                            setShowUnitPicker(false);
+                          }}
+                        >
+                          <Text style={[styles.unitOptionText, { color: theme.text }]}>
+                            {unit.icon} {unit.label}
+                          </Text>
+                          {newUnit === unit.value && (
+                            <Text style={styles.checkIcon}>✓</Text>
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  )}
                 </View>
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Kategori</Text>
+                <Text style={[styles.inputLabel, { color: theme.text }]}>Kategori</Text>
                 <TextInput
-                  style={[styles.input, errors.category && styles.inputError]}
+                  style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text, borderColor: theme.border }, errors.category && styles.inputError]}
                   placeholder="T.ex. Mejeri, Bageri..."
+                  placeholderTextColor={theme.textSecondary}
                   value={newCategory}
                   onChangeText={text => {
                     setNewCategory(text);
                     if (errors.category) setErrors({ ...errors, category: undefined });
                   }}
                 />
-                {errors.category && <Text style={styles.errorText}>{errors.category}</Text>}
+                {errors.category && <Text style={[styles.errorText, { color: theme.error }]}>{errors.category}</Text>}
               </View>
             </ScrollView>
 
             <View style={styles.modalActions}>
               <TouchableOpacity 
-                style={[styles.actionButton, styles.saveButton]} 
+                style={[styles.actionButton, styles.saveButton, { backgroundColor: theme.success }]} 
                 onPress={handleSave}
               >
-                <Text style={styles.saveButtonText}>
+                <Text style={[styles.saveButtonText, { color: theme.textInverse }]}>
                   {editingItem ? "Uppdatera" : "Lägg till"}
                 </Text>
               </TouchableOpacity>
               
               {editingItem && (
                 <TouchableOpacity 
-                  style={[styles.actionButton, styles.deleteButton]} 
+                  style={[styles.actionButton, styles.deleteButton, { backgroundColor: theme.error }]} 
                   onPress={handleDelete}
                 >
-                  <Text style={styles.deleteButtonText}>Ta bort</Text>
+                  <Text style={[styles.deleteButtonText, { color: theme.textInverse }]}>Ta bort</Text>
                 </TouchableOpacity>
               )}
               
               <TouchableOpacity 
-                style={[styles.actionButton, styles.cancelButton]} 
+                style={[styles.actionButton, styles.cancelButton, { borderColor: theme.border }]} 
                 onPress={resetModal}
               >
-                <Text style={styles.cancelButtonText}>Avbryt</Text>
+                <Text style={[styles.cancelButtonText, { color: theme.text }]}>Avbryt</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -520,6 +560,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 8,
+    minHeight: "70%",
     maxHeight: "90%",
   },
   modalHeader: {
@@ -587,6 +628,60 @@ const styles = StyleSheet.create({
   picker: {
     height: 48,
     color: "#1f2937",
+  },
+  unitPickerButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 48,
+  },
+  unitPickerText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  dropdownArrow: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  unitScrollList: {
+    position: 'absolute',
+    top: 52,
+    left: 0,
+    right: 0,
+    maxHeight: 180,
+    borderWidth: 2,
+    borderRadius: 12,
+    marginTop: 4,
+    zIndex: 1000,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    overflow: 'hidden',
+  },
+  unitOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+  },
+  unitOptionActive: {
+    backgroundColor: 'rgba(57, 73, 171, 0.1)',
+  },
+  unitOptionText: {
+    fontSize: 16,
+  },
+  checkIcon: {
+    fontSize: 18,
+    color: '#3949ab',
+    fontWeight: 'bold',
   },
   modalActions: {
     padding: 20,

@@ -1,23 +1,25 @@
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { useTheme } from '../context/ThemeContext';
 
 export default function NotesSection({ navigation }) {
+  const { theme } = useTheme();
   return (
     <TouchableOpacity
       activeOpacity={0.85}
       onPress={() => navigation && navigation.navigate("NotesPage")}
-      style={styles.card}
+      style={[styles.card, { backgroundColor: theme.cardBackground, shadowColor: theme.shadow }]}
     >
       <View style={styles.header}>
         <Text style={styles.icon}>📝</Text>
-        <Text style={styles.title}>Anteckningar</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Anteckningar</Text>
       </View>
       <View style={styles.content}>
-        <Text style={styles.itemCount}>6 anteckningar</Text>
-        <Text style={styles.lastNote}>Senast: Handla mat</Text>
+        <Text style={[styles.itemCount, { color: theme.warning }]}>6 anteckningar</Text>
+        <Text style={[styles.lastNote, { color: theme.textSecondary }]}>Senast: Handla mat</Text>
       </View>
-      <View style={styles.statusBadge}>
-        <Text style={styles.statusText}>Aktuell</Text>
+      <View style={[styles.statusBadge, { backgroundColor: theme.warning + '20' }]}>
+        <Text style={[styles.statusText, { color: theme.warning }]}>Aktuell</Text>
       </View>
     </TouchableOpacity>
   );

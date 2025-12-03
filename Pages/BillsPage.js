@@ -1,11 +1,14 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, Modal, TextInput, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from "@react-native-picker/picker";
 import { useBillsData } from '../hooks/useAsyncStorage';
+import { useTheme } from '../context/ThemeContext';
 
 export default function BillsPage({ navigation }) {
   // 💾 AsyncStorage hook - hanterar all data automatiskt
   const [bills, setBills, removeBillsData, loading] = useBillsData();
+  const { theme } = useTheme();
   const [modalVisible, setModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [newName, setNewName] = useState("");
@@ -16,12 +19,12 @@ export default function BillsPage({ navigation }) {
 
   const renderItem = ({ item }) => (
     <TouchableOpacity 
-      style={styles.itemCard} 
+      style={[styles.itemCard, { backgroundColor: theme.cardBackground, shadowColor: theme.shadowColor, borderColor: theme.border }]} 
       onPress={() => openEditModal(item)}
       activeOpacity={0.7}
     >
-      <Text style={styles.itemName}>{item.name}</Text>
-      <Text style={styles.itemDetails}>
+      <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
+      <Text style={[styles.itemDetails, { color: theme.textSecondary }]}>
         Belopp: {item.amount} kr • Förfallodatum: {item.dueDate} • Status: {item.status}
       </Text>
     </TouchableOpacity>
@@ -117,9 +120,9 @@ export default function BillsPage({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <Text style={styles.title}>Hushållets Räkningar</Text>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <Text style={[styles.title, { color: theme.text }]}>Hushållets Räkningar</Text>
         <FlatList
           data={bills}
           keyExtractor={item => item.id}
@@ -139,25 +142,27 @@ export default function BillsPage({ navigation }) {
             style={styles.modalOverlay}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
           >
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>
+            <View style={[styles.modalContent, { backgroundColor: theme.modalBackground }]}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
                 {editingItem ? "Redigera räkning" : "Lägg till räkning"}
               </Text>
               
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text, borderColor: theme.border }]}
                 placeholder="Räkningsnamn (t.ex. Elräkning)"
+                placeholderTextColor={theme.textSecondary}
                 value={newName}
                 onChangeText={text => {
                   setNewName(text);
                   if (errors.name) setErrors({ ...errors, name: undefined });
                 }}
               />
-              {errors.name ? <Text style={styles.errorText}>{errors.name}</Text> : null}
+              {errors.name ? <Text style={[styles.errorText, { color: theme.error }]}>{errors.name}</Text> : null}
               
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text, borderColor: theme.border }]}
                 placeholder="Belopp (t.ex. 1200)"
+                placeholderTextColor={theme.textSecondary}
                 value={newAmount}
                 onChangeText={text => {
                   const numeric = text.replace(/[^0-9]/g, "");
@@ -169,26 +174,27 @@ export default function BillsPage({ navigation }) {
               {errors.amount ? <Text style={styles.errorText}>{errors.amount}</Text> : null}
               
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text, borderColor: theme.border }]}
                 placeholder="Förfallodatum (ÅÅÅÅ-MM-DD)"
+                placeholderTextColor={theme.textSecondary}
                 value={newDueDate}
                 onChangeText={text => {
                   setNewDueDate(text);
                   if (errors.dueDate) setErrors({ ...errors, dueDate: undefined });
                 }}
               />
-              {errors.dueDate ? <Text style={styles.errorText}>{errors.dueDate}</Text> : null}
+              {errors.dueDate ? <Text style={[styles.errorText, { color: theme.error }]}>{errors.dueDate}</Text> : null}
               
               <View style={styles.pickerWrapper}>
-                <Text style={styles.pickerLabel}>Status:</Text>
-                <TouchableOpacity style={styles.pickerButton}>
-                  <Text style={styles.pickerButtonText}>{newStatus}</Text>
-                  <Text style={styles.pickerArrow}>▼</Text>
+                <Text style={[styles.pickerLabel, { color: theme.text }]}>Status:</Text>
+                <TouchableOpacity style={[styles.pickerButton, { backgroundColor: theme.inputBackground, borderColor: theme.border }]}>
+                  <Text style={[styles.pickerButtonText, { color: theme.text }]}>{newStatus}</Text>
+                  <Text style={[styles.pickerArrow, { color: theme.text }]}>▼</Text>
                 </TouchableOpacity>
                 <Picker
                   selectedValue={newStatus}
                   onValueChange={(itemValue) => setNewStatus(itemValue)}
-                  style={styles.hiddenPicker}
+                  style={[styles.hiddenPicker, { color: theme.text }]}
                 >
                   <Picker.Item label="Ej betald" value="Ej betald" />
                   <Picker.Item label="Betald" value="Betald" />
@@ -197,18 +203,18 @@ export default function BillsPage({ navigation }) {
               </View>
               
               <View style={styles.modalButtons}>
-                <TouchableOpacity style={styles.modalButton} onPress={handleSave}>
-                  <Text style={styles.modalButtonText}>
+                <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.success }]} onPress={handleSave}>
+                  <Text style={[styles.modalButtonText, { color: theme.textInverse }]}>
                     {editingItem ? "Uppdatera" : "Lägg till"}
                   </Text>
                 </TouchableOpacity>
                 {editingItem && (
-                  <TouchableOpacity style={[styles.modalButton, { backgroundColor: "#d32f2f" }]} onPress={handleDelete}>
-                    <Text style={styles.modalButtonText}>Ta bort</Text>
+                  <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.error }]} onPress={handleDelete}>
+                    <Text style={[styles.modalButtonText, { color: theme.textInverse }]}>Ta bort</Text>
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity style={[styles.modalButton, { backgroundColor: "#bbb" }]} onPress={() => { setModalVisible(false); setErrors({}); }}>
-                  <Text style={styles.modalButtonText}>Avbryt</Text>
+                <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.cardBackground, borderColor: theme.border, borderWidth: 1 }]} onPress={() => { setModalVisible(false); setErrors({}); }}>
+                  <Text style={[styles.modalButtonText, { color: theme.text }]}>Avbryt</Text>
                 </TouchableOpacity>
               </View>
             </View>

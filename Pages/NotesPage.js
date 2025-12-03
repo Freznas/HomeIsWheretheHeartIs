@@ -1,10 +1,13 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, Modal, TextInput, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNotesData } from '../hooks/useAsyncStorage';
+import { useTheme } from '../context/ThemeContext';
 
 export default function NotesPage({ navigation }) {
   // 💾 AsyncStorage hook - hanterar all data automatiskt
   const [notesList, setNotesList, removeNotesData, loading] = useNotesData();
+  const { theme } = useTheme();
   const [modalVisible, setModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [newTitle, setNewTitle] = useState("");
@@ -13,12 +16,12 @@ export default function NotesPage({ navigation }) {
 
   const renderItem = ({ item }) => (
     <TouchableOpacity 
-      style={styles.itemCard} 
+      style={[styles.itemCard, { backgroundColor: theme.cardBackground, shadowColor: theme.shadowColor, borderColor: theme.border }]} 
       onPress={() => openEditModal(item)}
       activeOpacity={0.7}
     >
-      <Text style={styles.itemName}>{item.title}</Text>
-      <Text style={styles.itemDetails}>{item.content}</Text>
+      <Text style={[styles.itemName, { color: theme.text }]}>{item.title}</Text>
+      <Text style={[styles.itemDetails, { color: theme.textSecondary }]}>{item.content}</Text>
     </TouchableOpacity>
   );
 
@@ -99,9 +102,9 @@ export default function NotesPage({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <Text style={styles.title}>Anteckningar</Text>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <Text style={[styles.title, { color: theme.text }]}>Anteckningar</Text>
         <FlatList
           data={notesList}
           keyExtractor={item => item.id}
@@ -121,25 +124,27 @@ export default function NotesPage({ navigation }) {
             style={styles.modalOverlay}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
           >
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>
+            <View style={[styles.modalContent, { backgroundColor: theme.modalBackground }]}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
                 {editingItem ? "Redigera anteckning" : "Lägg till anteckning"}
               </Text>
               
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text, borderColor: theme.border }]}
                 placeholder="Titel"
+                placeholderTextColor={theme.textSecondary}
                 value={newTitle}
                 onChangeText={text => {
                   setNewTitle(text);
                   if (errors.title) setErrors({ ...errors, title: undefined });
                 }}
               />
-              {errors.title ? <Text style={styles.errorText}>{errors.title}</Text> : null}
+              {errors.title ? <Text style={[styles.errorText, { color: theme.error }]}>{errors.title}</Text> : null}
               
               <TextInput
-                style={[styles.input, styles.textArea]}
+                style={[styles.input, styles.textArea, { backgroundColor: theme.inputBackground, color: theme.text, borderColor: theme.border }]}
                 placeholder="Skriv din anteckning här..."
+                placeholderTextColor={theme.textSecondary}
                 value={newContent}
                 onChangeText={text => {
                   setNewContent(text);
@@ -149,21 +154,21 @@ export default function NotesPage({ navigation }) {
                 numberOfLines={4}
                 textAlignVertical="top"
               />
-              {errors.content ? <Text style={styles.errorText}>{errors.content}</Text> : null}
+              {errors.content ? <Text style={[styles.errorText, { color: theme.error }]}>{errors.content}</Text> : null}
               
               <View style={styles.modalButtons}>
-                <TouchableOpacity style={styles.modalButton} onPress={handleSave}>
-                  <Text style={styles.modalButtonText}>
+                <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.success }]} onPress={handleSave}>
+                  <Text style={[styles.modalButtonText, { color: theme.textInverse }]}>
                     {editingItem ? "Uppdatera" : "Lägg till"}
                   </Text>
                 </TouchableOpacity>
                 {editingItem && (
-                  <TouchableOpacity style={[styles.modalButton, { backgroundColor: "#d32f2f" }]} onPress={handleDelete}>
-                    <Text style={styles.modalButtonText}>Ta bort</Text>
+                  <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.error }]} onPress={handleDelete}>
+                    <Text style={[styles.modalButtonText, { color: theme.textInverse }]}>Ta bort</Text>
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity style={[styles.modalButton, { backgroundColor: "#bbb" }]} onPress={() => { setModalVisible(false); setErrors({}); }}>
-                  <Text style={styles.modalButtonText}>Avbryt</Text>
+                <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.cardBackground, borderColor: theme.border, borderWidth: 1 }]} onPress={() => { setModalVisible(false); setErrors({}); }}>
+                  <Text style={[styles.modalButtonText, { color: theme.text }]}>Avbryt</Text>
                 </TouchableOpacity>
               </View>
             </View>

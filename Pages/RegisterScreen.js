@@ -1,0 +1,432 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  StatusBar,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Alert,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+
+const AVATARS = ['👤', '👨', '👩', '🧑', '👦', '👧', '👨‍💼', '👩‍💼', '👨‍🍳', '👩‍🍳', '👨‍🌾', '👩‍🌾'];
+const ROLES = [
+  { id: 'admin', label: 'Administratör', icon: '👑', description: 'Full åtkomst till allt' },
+  { id: 'medlem', label: 'Familjemedlem', icon: '👥', description: 'Standard åtkomst' },
+];
+
+export default function RegisterScreen({ navigation }) {
+  const { theme } = useTheme();
+  const { register, loginWithGoogle, googleAuthRequest } = useAuth();
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    role: 'medlem',
+    avatar: '👤',
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handleRegister = async () => {
+    // Validering
+    if (!formData.name.trim() || !formData.email.trim() || !formData.password.trim()) {
+      Alert.alert('Fält saknas', 'Fyll i alla obligatoriska fält');
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      Alert.alert('Lösenord matchar inte', 'Kontrollera att båda lösenorden är samma');
+      return;
+    }
+
+    if (formData.password.length < 4) {
+      Alert.alert('Svagt lösenord', 'Lösenordet måste vara minst 4 tecken');
+      return;
+    }
+
+    setLoading(true);
+    const result = await register({
+      name: formData.name.trim(),
+      email: formData.email.trim().toLowerCase(),
+      password: formData.password,
+      role: formData.role,
+      avatar: formData.avatar,
+    });
+    setLoading(false);
+
+    if (!result.success) {
+      Alert.alert('Registrering misslyckades', result.error);
+    }
+    // Om success är true kommer användaren automatiskt loggas in via AuthContext
+  };
+  
+  const handleGoogleRegister = async () => {
+    setLoading(true);
+    const result = await loginWithGoogle();
+    setLoading(false);
+    
+    if (!result.success) {
+      Alert.alert('Google-registrering misslyckades', result.error);
+    }
+  };
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle={theme.statusBar} />
+      
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity
+              style={[styles.backButton, { backgroundColor: theme.border }]}
+              onPress={() => navigation.goBack()}
+            >
+              <Text style={[styles.backIcon, { color: theme.text }]}>←</Text>
+            </TouchableOpacity>
+            <Text style={[styles.title, { color: theme.text }]}>Skapa konto</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+              Gå med i hushållet
+            </Text>
+          </View>
+
+          {/* Form */}
+          <View style={[styles.formContainer, { backgroundColor: theme.cardBackground }]}>
+            {/* Avatar Selector */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: theme.text }]}>Välj avatar</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.avatarScroll}>
+                {AVATARS.map((avatar) => (
+                  <TouchableOpacity
+                    key={avatar}
+                    style={[
+                      styles.avatarOption,
+                      formData.avatar === avatar && { backgroundColor: theme.primary + '20', borderColor: theme.primary },
+                    ]}
+                    onPress={() => setFormData({ ...formData, avatar })}
+                  >
+                    <Text style={styles.avatarEmoji}>{avatar}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: theme.text }]}>Namn *</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.background,
+                    color: theme.text,
+                    borderColor: theme.border,
+                  },
+                ]}
+                placeholder="Ditt namn"
+                placeholderTextColor={theme.textTertiary}
+                value={formData.name}
+                onChangeText={(text) => setFormData({ ...formData, name: text })}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: theme.text }]}>Email *</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.background,
+                    color: theme.text,
+                    borderColor: theme.border,
+                  },
+                ]}
+                placeholder="din@email.com"
+                placeholderTextColor={theme.textTertiary}
+                value={formData.email}
+                onChangeText={(text) => setFormData({ ...formData, email: text })}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: theme.text }]}>Lösenord *</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.background,
+                    color: theme.text,
+                    borderColor: theme.border,
+                  },
+                ]}
+                placeholder="Minst 4 tecken"
+                placeholderTextColor={theme.textTertiary}
+                value={formData.password}
+                onChangeText={(text) => setFormData({ ...formData, password: text })}
+                secureTextEntry
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: theme.text }]}>Bekräfta lösenord *</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.background,
+                    color: theme.text,
+                    borderColor: theme.border,
+                  },
+                ]}
+                placeholder="Skriv lösenordet igen"
+                placeholderTextColor={theme.textTertiary}
+                value={formData.confirmPassword}
+                onChangeText={(text) => setFormData({ ...formData, confirmPassword: text })}
+                secureTextEntry
+              />
+            </View>
+
+            {/* Role Selector */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: theme.text }]}>Roll</Text>
+              {ROLES.map((role) => (
+                <TouchableOpacity
+                  key={role.id}
+                  style={[
+                    styles.roleOption,
+                    {
+                      backgroundColor: theme.background,
+                      borderColor: formData.role === role.id ? theme.primary : theme.border,
+                    },
+                  ]}
+                  onPress={() => setFormData({ ...formData, role: role.id })}
+                >
+                  <Text style={styles.roleIcon}>{role.icon}</Text>
+                  <View style={styles.roleInfo}>
+                    <Text style={[styles.roleLabel, { color: theme.text }]}>{role.label}</Text>
+                    <Text style={[styles.roleDescription, { color: theme.textSecondary }]}>
+                      {role.description}
+                    </Text>
+                  </View>
+                  {formData.role === role.id && (
+                    <Text style={styles.checkmark}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.registerButton,
+                { backgroundColor: theme.primary },
+                loading && styles.registerButtonDisabled,
+              ]}
+              onPress={handleRegister}
+              disabled={loading}
+            >
+              <Text style={[styles.registerButtonText, { color: theme.textInverse }]}>
+                {loading ? 'Skapar konto...' : 'Skapa konto'}
+              </Text>
+            </TouchableOpacity>
+            
+            <View style={styles.divider}>
+              <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
+              <Text style={[styles.dividerText, { color: theme.textSecondary }]}>eller</Text>
+              <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
+            </View>
+            
+            <TouchableOpacity
+              style={[
+                styles.googleButton,
+                { backgroundColor: '#FFFFFF', borderColor: theme.border },
+                (!googleAuthRequest || loading) && styles.registerButtonDisabled,
+              ]}
+              onPress={handleGoogleRegister}
+              disabled={!googleAuthRequest || loading}
+            >
+              <Text style={styles.googleIcon}>🔴</Text>
+              <Text style={styles.googleButtonText}>
+                {!googleAuthRequest ? 'Google läser in...' : 'Registrera med Google'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    padding: 24,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 32,
+    marginTop: 20,
+  },
+  backButton: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backIcon: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+  },
+  formContainer: {
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+  },
+  avatarScroll: {
+    marginBottom: 8,
+  },
+  avatarOption: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  avatarEmoji: {
+    fontSize: 32,
+  },
+  roleOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    marginBottom: 12,
+  },
+  roleIcon: {
+    fontSize: 32,
+    marginRight: 16,
+  },
+  roleInfo: {
+    flex: 1,
+  },
+  roleLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  roleDescription: {
+    fontSize: 12,
+  },
+  checkmark: {
+    fontSize: 24,
+    color: '#4caf50',
+  },
+  registerButton: {
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  registerButtonDisabled: {
+    opacity: 0.6,
+  },
+  registerButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 14,
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  googleIcon: {
+    fontSize: 20,
+    marginRight: 12,
+  },
+  googleButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+});

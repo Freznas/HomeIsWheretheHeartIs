@@ -1,23 +1,25 @@
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { useTheme } from '../context/ThemeContext';
 
 export default function BillsSection({ navigation }) {
+  const { theme } = useTheme();
   return (
     <TouchableOpacity
       activeOpacity={0.85}
       onPress={() => navigation && navigation.navigate("BillsPage")}
-      style={styles.card}
+      style={[styles.card, { backgroundColor: theme.cardBackground, shadowColor: theme.shadow }]}
     >
       <View style={styles.header}>
         <Text style={styles.icon}>💳</Text>
-        <Text style={styles.title}>Räkningar</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Räkningar</Text>
       </View>
       <View style={styles.content}>
-        <Text style={styles.itemCount}>4 räkningar</Text>
-        <Text style={styles.dueInfo}>2 förfaller snart</Text>
+        <Text style={[styles.itemCount, { color: theme.error }]}>4 räkningar</Text>
+        <Text style={[styles.dueInfo, { color: theme.textSecondary }]}>2 förfaller snart</Text>
       </View>
-      <View style={styles.statusBadge}>
-        <Text style={styles.statusText}>Uppmärksamhet</Text>
+      <View style={[styles.statusBadge, { backgroundColor: theme.error + '20' }]}>
+        <Text style={[styles.statusText, { color: theme.error }]}>Uppmärksamhet</Text>
       </View>
     </TouchableOpacity>
   );

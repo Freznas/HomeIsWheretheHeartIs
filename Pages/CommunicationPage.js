@@ -8,12 +8,14 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   StatusBar,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCommunicationData } from '../hooks/useAsyncStorage';
+import { useTheme } from '../context/ThemeContext';
 
 export default function CommunicationPage({ navigation }) {
+  const { theme } = useTheme();
   const [conversation, setConversation, removeCommunicationData, loading] = useCommunicationData();
   const [input, setInput] = useState("");
 
@@ -47,17 +49,17 @@ export default function CommunicationPage({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#3949ab" />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.headerBackground} />
       
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: theme.headerBackground }]}>
         <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-          <Text style={styles.backIcon}>←</Text>
+          <Text style={[styles.backIcon, { color: theme.headerText }]}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Familjekonversation</Text>
-          <Text style={styles.headerSubtitle}>Anna, Erik, Du</Text>
+          <Text style={[styles.headerTitle, { color: theme.headerText }]}>Familjekonversation</Text>
+          <Text style={[styles.headerSubtitle, { color: theme.headerText, opacity: 0.8 }]}>Anna, Erik, Du</Text>
         </View>
         <TouchableOpacity style={styles.optionsButton}>
           <Text style={styles.optionsIcon}>⋮</Text>
@@ -66,14 +68,14 @@ export default function CommunicationPage({ navigation }) {
 
       {/* Messages */}
       <ScrollView 
-        style={styles.messagesContainer}
+        style={[styles.messagesContainer, { backgroundColor: theme.background }]}
         contentContainerStyle={styles.messagesContent}
         showsVerticalScrollIndicator={false}
       >
         {conversation.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>💬 Ingen konversation ännu!</Text>
-            <Text style={styles.emptyStateSubtext}>
+            <Text style={[styles.emptyStateText, { color: theme.text }]}>💬 Ingen konversation ännu!</Text>
+            <Text style={[styles.emptyStateSubtext, { color: theme.textSecondary }]}>
               Skicka det första meddelandet för att starta konversationen med familjen
             </Text>
           </View>
@@ -81,17 +83,17 @@ export default function CommunicationPage({ navigation }) {
           conversation.map(msg => (
             <View key={msg.id} style={[
               styles.messageRow,
-              msg.sender === "Du" ? styles.myMessage : styles.otherMessage
+              msg.sender === "Du" ? [styles.myMessage, { backgroundColor: theme.primary }] : [styles.otherMessage, { backgroundColor: theme.cardBackground, borderColor: theme.border }]
             ]}>
               <View style={styles.messageHeader}>
-                <Text style={[styles.sender, msg.sender === "Du" && styles.mySender]}>
+                <Text style={[styles.sender, msg.sender === "Du" ? { color: theme.textInverse } : { color: theme.text }]}>
                   {msg.sender}
                 </Text>
-                <Text style={[styles.timestamp, msg.sender === "Du" && styles.myTimestamp]}>
+                <Text style={[styles.timestamp, msg.sender === "Du" ? { color: theme.textInverse, opacity: 0.8 } : { color: theme.textSecondary }]}>
                   {msg.timestamp}
                 </Text>
               </View>
-              <Text style={[styles.messageText, msg.sender === "Du" && styles.myMessageText]}>
+              <Text style={[styles.messageText, msg.sender === "Du" ? { color: theme.textInverse } : { color: theme.text }]}>
                 {msg.text}
               </Text>
             </View>
@@ -104,16 +106,16 @@ export default function CommunicationPage({ navigation }) {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.inputContainer}
       >
-        <View style={styles.inputRow}>
+        <View style={[styles.inputRow, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
           <TouchableOpacity style={styles.attachButton}>
             <Text style={styles.attachIcon}>📎</Text>
           </TouchableOpacity>
           <TextInput
-            style={styles.messageInput}
+            style={[styles.messageInput, { color: theme.text }]}
             value={input}
             onChangeText={setInput}
             placeholder="Skriv ett meddelande..."
-            placeholderTextColor="#999"
+            placeholderTextColor={theme.textSecondary}
             returnKeyType="send"
             onSubmitEditing={handleSend}
             multiline

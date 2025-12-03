@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   StatusBar,
   FlatList,
@@ -11,9 +10,12 @@ import {
   Modal,
   TextInput,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useChoresData } from '../hooks/useAsyncStorage';
+import { useTheme } from '../context/ThemeContext';
 
 export default function ChoresPage({ navigation }) {
+  const { theme } = useTheme();
   // 💾 AsyncStorage hook - hanterar all data automatiskt
   const [chores, setChores, removeChoresData, loading] = useChoresData();
   const [modalVisible, setModalVisible] = useState(false);
@@ -48,21 +50,21 @@ export default function ChoresPage({ navigation }) {
 
   const renderChore = ({ item }) => (
     <TouchableOpacity 
-      style={[styles.choreCard, item.completed && styles.completedChore]}
+      style={[styles.choreCard, { backgroundColor: theme.cardBackground, shadowColor: theme.shadowColor, borderColor: theme.border }, item.completed && styles.completedChore]}
       onPress={() => toggleComplete(item.id)}
     >
       <View style={styles.choreHeader}>
-        <View style={[styles.checkbox, item.completed && styles.checkedBox]}>
-          <Text style={styles.checkmark}>{item.completed ? "✓" : ""}</Text>
+        <View style={[styles.checkbox, { borderColor: theme.border }, item.completed && { backgroundColor: theme.success }]}>
+          <Text style={[styles.checkmark, { color: theme.textInverse }]}>{item.completed ? "✓" : ""}</Text>
         </View>
         <View style={styles.choreDetails}>
-          <Text style={[styles.taskName, item.completed && styles.completedText]}>
+          <Text style={[styles.taskName, { color: theme.text }, item.completed && styles.completedText]}>
             {item.task}
           </Text>
-          <Text style={styles.assignedTo}>Tilldelad: {item.assignedTo}</Text>
+          <Text style={[styles.assignedTo, { color: theme.textSecondary }]}>Tilldelad: {item.assignedTo}</Text>
         </View>
-        <View style={styles.dueDateBadge}>
-          <Text style={styles.dueDateText}>{item.dueDate}</Text>
+        <View style={[styles.dueDateBadge, { backgroundColor: theme.accent }]}>
+          <Text style={[styles.dueDateText, { color: theme.textInverse }]}>{item.dueDate}</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -81,18 +83,18 @@ export default function ChoresPage({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#3949ab" />
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.headerBackground} />
       
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: theme.headerBackground }]}>
         <TouchableOpacity 
           style={styles.backButton} 
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backIcon}>←</Text>
+          <Text style={[styles.backIcon, { color: theme.headerText }]}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Sysslor</Text>
-          <Text style={styles.headerSubtitle}>
+          <Text style={[styles.headerTitle, { color: theme.headerText }]}>Sysslor</Text>
+          <Text style={[styles.headerSubtitle, { color: theme.headerText, opacity: 0.8 }]}>
             {completedCount}/{chores.length} klara
           </Text>
         </View>
@@ -104,13 +106,13 @@ export default function ChoresPage({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
         {chores.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>
+            <Text style={[styles.emptyStateText, { color: theme.text }]}>
               🧹 Inga sysslor ännu!
             </Text>
-            <Text style={styles.emptyStateSubtext}>
+            <Text style={[styles.emptyStateSubtext, { color: theme.textSecondary }]}>
               Tryck på knappen nedan för att lägga till din första syssla
             </Text>
           </View>
@@ -139,44 +141,46 @@ export default function ChoresPage({ navigation }) {
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: theme.modalBackground }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Ny syssla</Text>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Ny syssla</Text>
               <TouchableOpacity 
                 onPress={() => setModalVisible(false)} 
                 style={styles.closeButton}
               >
-                <Text style={styles.closeButtonText}>×</Text>
+                <Text style={[styles.closeButtonText, { color: theme.text }]}>×</Text>
               </TouchableOpacity>
             </View>
             
             <View style={styles.modalForm}>
-              <Text style={styles.inputLabel}>Uppgift</Text>
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Uppgift</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text, borderColor: theme.border }]}
                 placeholder="T.ex. Diska, Dammsuga..."
+                placeholderTextColor={theme.textSecondary}
                 value={newTask}
                 onChangeText={setNewTask}
               />
               
-              <Text style={styles.inputLabel}>Tilldelad till</Text>
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Tilldelad till</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text, borderColor: theme.border }]}
                 placeholder="Namn på personen..."
+                placeholderTextColor={theme.textSecondary}
                 value={newAssignee}
                 onChangeText={setNewAssignee}
               />
             </View>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.saveButton} onPress={addChore}>
-                <Text style={styles.saveButtonText}>Lägg till</Text>
+              <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.success }]} onPress={addChore}>
+                <Text style={[styles.saveButtonText, { color: theme.textInverse }]}>Lägg till</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={styles.cancelButton} 
+                style={[styles.cancelButton, { borderColor: theme.border }]} 
                 onPress={() => setModalVisible(false)}
               >
-                <Text style={styles.cancelButtonText}>Avbryt</Text>
+                <Text style={[styles.cancelButtonText, { color: theme.text }]}>Avbryt</Text>
               </TouchableOpacity>
             </View>
           </View>

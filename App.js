@@ -7,11 +7,14 @@ import {
   TouchableOpacity,
   Platform,
   Dimensions,
-  SafeAreaView,
   StatusBar,
   Animated,
+  Alert,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { PanGestureHandler, TapGestureHandler, State } from "react-native-gesture-handler";
+import { useTheme } from './context/ThemeContext';
+import { useAuth } from './context/AuthContext';
 import HeaderView from "./components/HeaderView";
 import HighlightSection from "./Sections/HighlightSection";
 import CalendarSection from "./Sections/CalendarSection";
@@ -28,6 +31,10 @@ import VisitorsSection from "./Sections/VisitorsSection";
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
 export default function App({ navigation }) {
+  // 🎨 Hämta tema och dark mode toggle
+  const { theme, isDarkMode, toggleTheme } = useTheme();
+  const { isLoggedIn, currentUser } = useAuth();
+  
   // 🐛 Debug: Kontrollera att navigation prop når fram korrekt
   console.log("App component rendered with navigation:", !!navigation);
 
@@ -54,7 +61,27 @@ export default function App({ navigation }) {
   // 📚 simultaneousHandlers använder dessa för att tillåta tap OCH pan samtidigt
 
   const handleProfile = () => {
-    console.log("Profile pressed");
+    if (!isLoggedIn) {
+      // Visa popup om användaren inte är inloggad
+      Alert.alert(
+        'Logga in',
+        'Du måste logga in för att se din profil',
+        [
+          { text: 'Avbryt', style: 'cancel' },
+          { 
+            text: 'Logga in', 
+            onPress: () => navigation.navigate('Login') 
+          },
+        ]
+      );
+    } else {
+      // Navigera till profilsidan om inloggad
+      navigation.navigate('ProfilePage');
+    }
+  };
+
+  const handleThemeToggle = () => {
+    toggleTheme();
   };
 
   // 🚀 STEG 6: Pan Gesture Event Handler - Realtids drag-hantering (60fps)
@@ -157,19 +184,35 @@ export default function App({ navigation }) {
 
   return (
     <>
-      <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#3949ab" />
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+        <StatusBar 
+          barStyle={isDarkMode ? "light-content" : "dark-content"} 
+          backgroundColor={theme.headerBackground} 
+        />
         
         {/* Modern Header */}
-        <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <View>
-              <Text style={styles.headerGreeting}>Hej, välkommen hem!</Text>
-              <Text style={styles.headerTitle}>Mitt Hushåll</Text>
-            </View>
-            <TouchableOpacity style={styles.profileButton} onPress={handleProfile}>
+        <View style={[styles.header, { backgroundColor: theme.headerBackground }]}>
+          <View style={styles.headerButtons}>
+            <TouchableOpacity 
+              style={[styles.themeButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]} 
+              onPress={handleThemeToggle}
+            >
+              <Text style={styles.themeIcon}>{isDarkMode ? '☀️' : '🌙'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.profileButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]} 
+              onPress={handleProfile}
+            >
               <Text style={styles.profileIcon}>👤</Text>
             </TouchableOpacity>
+          </View>
+          <View style={styles.headerContent}>
+            <Text style={[styles.headerTitle, { color: theme.headerText }]}>
+              Home is Where the Hearth is
+            </Text>
+            <Text style={[styles.headerGreeting, { color: theme.headerText }]}>
+              Välkommen {currentUser?.name || 'Gäst'}
+            </Text>
           </View>
         </View>
 
@@ -294,44 +337,54 @@ export default function App({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
   },
   header: {
-    backgroundColor: "#3949ab",
     paddingHorizontal: 20,
-    paddingVertical: 25,
-    paddingTop: Platform.OS === 'ios' ? 50 : 25,
+    paddingVertical: 15,
+    paddingTop: Platform.OS === 'ios' ? 10 : 10,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 5,
   },
-  headerContent: {
+  headerButtons: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+    marginBottom: 10,
+  },
+  headerContent: {
+    alignItems: "flex-start",
   },
   headerGreeting: {
-    fontSize: 16,
-    color: "rgba(255,255,255,0.9)",
-    marginBottom: 4,
+    fontSize: 18,
+    opacity: 0.9,
+    marginTop: 4,
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "bold",
-    color: "#fff",
+  },
+  themeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  themeIcon: {
+    fontSize: 16,
   },
   profileButton: {
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
-    backgroundColor: "rgba(255,255,255,0.2)",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
   },
   profileIcon: {
-    fontSize: 20,
+    fontSize: 16,
   },
   scrollContainer: {
     flex: 1,

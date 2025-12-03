@@ -1,23 +1,25 @@
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { useTheme } from '../context/ThemeContext';
 
 export default function ChoresSection({ navigation }) {
+  const { theme } = useTheme();
   return (
     <TouchableOpacity
       activeOpacity={0.85}
       onPress={() => navigation && navigation.navigate("ChoresPage")}
-      style={styles.card}
+      style={[styles.card, { backgroundColor: theme.cardBackground, shadowColor: theme.shadow }]}
     >
       <View style={styles.header}>
-        <Text style={styles.icon}>✅</Text>
-        <Text style={styles.title}>Sysslor</Text>
+        <Text style={styles.icon}>✓</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Sysslor</Text>
       </View>
       <View style={styles.content}>
-        <Text style={styles.itemCount}>5 uppgifter</Text>
-        <Text style={styles.progress}>3 kvar att göra</Text>
+        <Text style={[styles.itemCount, { color: theme.success }]}>5 uppgifter</Text>
+        <Text style={[styles.progress, { color: theme.textSecondary }]}>3 kvar att göra</Text>
       </View>
-      <View style={styles.statusBadge}>
-        <Text style={styles.statusText}>Pågår</Text>
+      <View style={[styles.statusBadge, { backgroundColor: theme.success + '20' }]}>
+        <Text style={[styles.statusText, { color: theme.success }]}>Pågår</Text>
       </View>
     </TouchableOpacity>
   );

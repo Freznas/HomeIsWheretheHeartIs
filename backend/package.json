@@ -1,0 +1,26 @@
+{
+  "name": "homeiswheretheheartis-backend",
+  "version": "1.0.0",
+  "description": "Backend API för 2FA email-funktionalitet",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [
+    "2fa",
+    "email",
+    "sendgrid"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@sendgrid/mail": "^8.1.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}

@@ -1,5 +1,6 @@
 import React from "react";
-import { SafeAreaView, View, Text, ScrollView, StatusBar, Platform, Pressable } from "react-native";
+import { View, Text, ScrollView, StatusBar, Platform, Pressable } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import styles from "./Header.Styles"
 const HeaderView = ({ 

@@ -10,6 +10,13 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';  // "Roten" för all navigation
 import { createStackNavigator } from '@react-navigation/stack';  // Skapar en stack (som en kortlek) av skärmar
 
+// Theme Context för dark mode
+import { ThemeProvider } from './context/ThemeContext';
+// Auth Context för användarhantering
+import { AuthProvider, useAuth } from './context/AuthContext';
+// Notifications Context för notifikationer
+import { NotificationsProvider } from './context/NotificationsContext';
+
 // STEG 2: Importera alla sidor som ska vara navigerbara
 // Varje import representerar en skärm som användaren kan navigera till
 import App from './App';                    // Hemskärmen - första sidan användaren ser
@@ -20,42 +27,35 @@ import ChoresPage from './Pages/ChoresPage';               // Sysslor/uppgifter 
 import BillsPage from './Pages/BillsPage';                 // Räkningar sidan
 import NotesPage from './Pages/NotesPage';                 // Anteckningar sidan
 import VisitorsPage from './Pages/VisitorsPage';           // Besökare sidan
+import CalendarPage from './Pages/CalendarPage';           // Kalender sidan
+import WeatherPage from './Pages/WeatherPage';             // Väder sidan
+import ProfilePage from './Pages/ProfilePage';             // Profilsidan
+import LoginScreen from './Pages/LoginScreen';             // Inloggningssidan
+import RegisterScreen from './Pages/RegisterScreen';       // Registreringssidan
 
 // STEG 3: Skapa Stack Navigator
 // Stack = "hög av papper" - nya sidor läggs på toppen, kan "pop" tillbaka till föregående
 const Stack = createStackNavigator();
 
 // STEG 4: Huvudkomponent för Navigation
-export default function Navigation() {
+function NavigationContent() {
+  const { isLoggedIn, isLoading } = useAuth();
+
+  if (isLoading) {
+    return null; // Eller en loading screen
+  }
+
   return (
-    // STEG 5: NavigationContainer - MÅSTE wrappa all navigation
-    // Fungerar som en "manager" för all navigation i hela appen
-    // Håller reda på nuvarande skärm, navigation history, och hanterar deep links
-    <NavigationContainer>
-      
-      {/* STEG 6: Stack.Navigator - Konfigurerar hur navigation ska fungera
-          
-          STEG 7: Registrera alla sidor som kan navigeras till
-          - Varje Stack.Screen representerar en sida i appen
-          - 'name' = det namnet som används i navigation.navigate("...")  
-          - 'component' = vilken React-komponent som ska renderas
-          
-          📍 NAVIGATION FLÖDE:
-          1. App startar → initialRouteName="Home" → App.js visas
-          2. Användare trycker på sektion → navigation.navigate("PageName")
-          3. React Navigation hittar Stack.Screen med matchande name
-          4. Renderar motsvarande component
-          5. Navigation stack: [Home, NewPage] (Home ligger under)
-          6. Användare kan gå tillbaka via swipe eller tillbaka-knapp
-      */}
-      <Stack.Navigator
-        initialRouteName="Home"        // Vilken skärm som visas först när appen startar
-        screenOptions={{
-          headerShown: false,          // Gömmer React Navigations inbyggda header
-                                      // Vi använder våra egna anpassade headers istället
-          gestureEnabled: true,        // Tillåter swipe-back gester (speciellt på iOS)
-        }}
-      >
+    <Stack.Navigator
+      initialRouteName={isLoggedIn ? "Home" : "LoginScreen"}
+      screenOptions={{
+        headerShown: false,
+        gestureEnabled: true,
+      }}
+    >
+      {isLoggedIn ? (
+        // Inloggade användare ser huvudappen
+        <>
         <Stack.Screen name="Home" component={App} />
         <Stack.Screen name="PantryPage" component={PantryPage} />
         <Stack.Screen name="ShoppingListPage" component={ShoppingListPage} />
@@ -64,8 +64,38 @@ export default function Navigation() {
         <Stack.Screen name="NotesPage" component={NotesPage} />
         <Stack.Screen name="VisitorsPage" component={VisitorsPage} />
         <Stack.Screen name="CommunicationPage" component={CommunicationPage} />
-      </Stack.Navigator>
-    </NavigationContainer>
+        <Stack.Screen name="CalendarPage" component={CalendarPage} />
+        <Stack.Screen name="WeatherPage" component={WeatherPage} />
+        <Stack.Screen name="ProfilePage" component={ProfilePage} />
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="Register" component={RegisterScreen} />
+        </>
+      ) : (
+        // Ej inloggade användare ser auth-skärmar
+        <>
+          <Stack.Screen name="LoginScreen" component={LoginScreen} />
+          <Stack.Screen name="RegisterScreen" component={RegisterScreen} />
+        </>
+      )}
+    </Stack.Navigator>
+  );
+}
+
+export default function Navigation() {
+  return (
+    // STEG 4.5: ThemeProvider och AuthProvider - Wrappa allt i contexts
+    <ThemeProvider>
+      <AuthProvider>
+        <NotificationsProvider>
+          {/* STEG 5: NavigationContainer - MÅSTE wrappa all navigation
+              Fungerar som en "manager" för all navigation i hela appen
+              Håller reda på nuvarande skärm, navigation history, och hanterar deep links */}
+          <NavigationContainer>
+            <NavigationContent />
+          </NavigationContainer>
+        </NotificationsProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

@@ -1,5 +1,7 @@
 
-import { View, Text,StyleSheet } from "react-native";
+import React from "react";
+import { View, Text, StyleSheet } from "react-native";
+
 export default function ChatSection() {
   return (
     <View>
@@ -33,9 +35,9 @@ export default function ChatSection() {
           <Text>👨 Erik: "Mötet flyttat till 19:00"</Text>
         </View>
       </View>
-      
-      </View>
-)}
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   section: {
