@@ -1,9 +1,38 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useTheme } from '../context/ThemeContext';
+import { useChoresData } from '../hooks/useAsyncStorage';
 
 export default function ChoresSection({ navigation }) {
   const { theme } = useTheme();
+  const [chores] = useChoresData();
+  const [nextChore, setNextChore] = useState(null);
+  const [choreCount, setChoreCount] = useState(0);
+
+  useEffect(() => {
+    if (chores && chores.length > 0) {
+      // Räkna totalt antal sysslor
+      setChoreCount(chores.length);
+      
+      // Hitta nästa syssla med deadline (ej completed)
+      const upcoming = chores
+        .filter(c => !c.completed && c.dueDate)
+        .sort((a, b) => {
+          // Prioritera "Idag" och "Imorgon"
+          if (a.dueDate === "Idag") return -1;
+          if (b.dueDate === "Idag") return 1;
+          if (a.dueDate === "Imorgon") return -1;
+          if (b.dueDate === "Imorgon") return 1;
+          return 0;
+        });
+      
+      setNextChore(upcoming.length > 0 ? upcoming[0] : null);
+    } else {
+      setChoreCount(0);
+      setNextChore(null);
+    }
+  }, [chores]);
+
   return (
     <TouchableOpacity
       activeOpacity={0.85}
@@ -15,8 +44,12 @@ export default function ChoresSection({ navigation }) {
         <Text style={[styles.title, { color: theme.text }]}>Sysslor</Text>
       </View>
       <View style={styles.content}>
-        <Text style={[styles.itemCount, { color: theme.success }]}>5 uppgifter</Text>
-        <Text style={[styles.progress, { color: theme.textSecondary }]}>3 kvar att göra</Text>
+        <Text style={[styles.itemCount, { color: theme.success }]}>
+          {choreCount} {choreCount === 1 ? 'uppgift' : 'uppgifter'}
+        </Text>
+        <Text style={[styles.progress, { color: theme.textSecondary }]}>
+          {nextChore ? `Nästa: ${nextChore.task}` : 'Inga aktiva sysslor'}
+        </Text>
       </View>
       <View style={[styles.statusBadge, { backgroundColor: theme.success + '20' }]}>
         <Text style={[styles.statusText, { color: theme.success }]}>Pågår</Text>

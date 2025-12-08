@@ -1,52 +1,44 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useTheme } from '../context/ThemeContext';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect } from '@react-navigation/native';
-
-const STORAGE_KEY = '@visitors';
+import { useVisitorsData } from '../hooks/useAsyncStorage';
 
 export default function VisitorsSection({ navigation }) {
   const { theme } = useTheme();
+  const [allVisitors] = useVisitorsData();
   const [visitors, setVisitors] = useState([]);
   const [nextVisitor, setNextVisitor] = useState(null);
 
-  const loadVisitors = async () => {
-    try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const allVisitors = JSON.parse(stored);
-        setVisitors(allVisitors);
-        
-        // Hitta nästa besökare (dagens eller framtida besök)
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
-        const upcoming = allVisitors
-          .filter(v => v.date)
-          .map(v => ({
-            ...v,
-            dateObj: new Date(v.date),
-          }))
-          .filter(v => v.dateObj >= today)
-          .sort((a, b) => a.dateObj - b.dateObj);
-        
-        if (upcoming.length > 0) {
-          setNextVisitor(upcoming[0]);
-        } else {
-          setNextVisitor(null);
-        }
+  useEffect(() => {
+    if (allVisitors && allVisitors.length > 0) {
+      // Hitta nästa besökare inom 3 dagar
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const threeDaysFromNow = new Date(today);
+      threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
+      
+      const upcoming = allVisitors
+        .filter(v => v.date)
+        .map(v => ({
+          ...v,
+          dateObj: new Date(v.date),
+        }))
+        .filter(v => v.dateObj >= today && v.dateObj <= threeDaysFromNow)
+        .sort((a, b) => a.dateObj - b.dateObj);
+      
+      setVisitors(upcoming);
+      
+      if (upcoming.length > 0) {
+        setNextVisitor(upcoming[0]);
+      } else {
+        setNextVisitor(null);
       }
-    } catch (error) {
-      console.error('Error loading visitors:', error);
+    } else {
+      setVisitors([]);
+      setNextVisitor(null);
     }
-  };
-
-  useFocusEffect(
-    React.useCallback(() => {
-      loadVisitors();
-    }, [])
-  );
+  }, [allVisitors]);
 
   const formatDate = (dateStr) => {
     const date = new Date(dateStr);

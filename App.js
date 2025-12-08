@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PanGestureHandler, TapGestureHandler, State } from "react-native-gesture-handler";
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from './context/ThemeContext';
 import { useAuth } from './context/AuthContext';
 import HeaderView from "./components/HeaderView";
@@ -34,6 +35,16 @@ export default function App({ navigation }) {
   // 🎨 Hämta tema och dark mode toggle
   const { theme, isDarkMode, toggleTheme } = useTheme();
   const { isLoggedIn, currentUser } = useAuth();
+  
+  // 🔄 Force re-render när man navigerar tillbaka till startsidan
+  const [refreshKey, setRefreshKey] = useState(0);
+  
+  useFocusEffect(
+    React.useCallback(() => {
+      // Tvinga alla sektioner att uppdateras när startsidan kommer i fokus
+      setRefreshKey(prev => prev + 1);
+    }, [])
+  );
   
   // 🐛 Debug: Kontrollera att navigation prop når fram korrekt
   console.log("App component rendered with navigation:", !!navigation);
@@ -221,7 +232,7 @@ export default function App({ navigation }) {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.sectionsGrid}>
+          <View style={styles.sectionsGrid} key={refreshKey}>
             <View style={styles.gridRow}>
               <View style={styles.fullWidth}>
                 <HighlightSection navigation={navigation} />
@@ -239,28 +250,28 @@ export default function App({ navigation }) {
 
             <View style={styles.gridRow}>
               <View style={styles.halfWidth}>
-                <PantrySection navigation={navigation} />
+                <PantrySection navigation={navigation} key={`pantry-${refreshKey}`} />
               </View>
               <View style={styles.halfWidth}>
-                <ShoppingListSection navigation={navigation} />
-              </View>
-            </View>
-
-            <View style={styles.gridRow}>
-              <View style={styles.halfWidth}>
-                <ChoresSection navigation={navigation} />
-              </View>
-              <View style={styles.halfWidth}>
-                <BillsSection navigation={navigation} />
+                <ShoppingListSection navigation={navigation} key={`shopping-${refreshKey}`} />
               </View>
             </View>
 
             <View style={styles.gridRow}>
               <View style={styles.halfWidth}>
-                <NotesSection navigation={navigation} />
+                <ChoresSection navigation={navigation} key={`chores-${refreshKey}`} />
               </View>
               <View style={styles.halfWidth}>
-                <VisitorsSection navigation={navigation} />
+                <BillsSection navigation={navigation} key={`bills-${refreshKey}`} />
+              </View>
+            </View>
+
+            <View style={styles.gridRow}>
+              <View style={styles.halfWidth}>
+                <NotesSection navigation={navigation} key={`notes-${refreshKey}`} />
+              </View>
+              <View style={styles.halfWidth}>
+                <VisitorsSection navigation={navigation} key={`visitors-${refreshKey}`} />
               </View>
             </View>
           </View>

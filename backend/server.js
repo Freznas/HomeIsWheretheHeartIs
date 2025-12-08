@@ -206,11 +206,6 @@ app.post('/api/auth/verify-2fa-code', async (req, res) => {
   }
 });
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
 // Cleanup gamla koder var 5:e minut
 setInterval(() => {
   const now = Date.now();
@@ -222,7 +217,13 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, '192.168.1.246', () => {
   console.log(`🚀 2FA Backend server körs på port ${PORT}`);
   console.log(`📧 SendGrid konfigurerad: ${process.env.SENDGRID_API_KEY ? 'Ja' : 'Nej'}`);
+  console.log(`🌐 Tillgänglig på: http://192.168.1.246:${PORT}`);
+  console.log(`🔥 Lyssnar på IP: 192.168.1.246`);
+});
+
+server.on('error', (error) => {
+  console.error('❌ Server error:', error);
 });

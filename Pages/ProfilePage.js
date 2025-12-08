@@ -13,12 +13,266 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Clipboard,
+  Share,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationsContext';
+import { getUserHousehold, subscribeToHousehold, leaveHousehold as leaveHouseholdFirebase, removeMember as removeMemberFirebase } from '../config/firebase';
+
+// Hushållssektion komponent
+function HouseholdSection({ theme, navigation, currentUser, showToast }) {
+  const [household, setHousehold] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+
+  useEffect(() => {
+    loadHousehold();
+  }, []);
+
+  useEffect(() => {
+    if (!household?.id) return;
+
+    // Lyssna på realtidsuppdateringar
+    const unsubscribe = subscribeToHousehold(household.id, (result) => {
+      if (result.success && result.household) {
+        setHousehold(result.household);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [household?.id]);
+
+  const loadHousehold = async () => {
+    try {
+      const result = await getUserHousehold(currentUser?.id);
+      if (result.success && result.household) {
+        setHousehold(result.household);
+      }
+    } catch (error) {
+      console.error('Error loading household:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copyInviteCode = async () => {
+    if (household?.inviteCode) {
+      await Clipboard.setStringAsync(household.inviteCode);
+      showToast('Inbjudningskod kopierad! 📋', 'success');
+    }
+  };
+
+  const shareInviteCode = async () => {
+    if (household?.inviteCode) {
+      try {
+        await Share.share({
+          message: `Gå med i hushållet "${household.name}"! 🏠\n\nInbjudningskod: ${household.inviteCode}\n\nÖppna Home Is Where The Hearth Is och välj "Gå med i befintligt hushåll" för att använda koden.`,
+        });
+      } catch (error) {
+        console.error('Error sharing:', error);
+      }
+    }
+  };
+
+  const leaveHouseholdHandler = () => {
+    Alert.alert(
+      'Lämna hushåll?',
+      `Är du säker på att du vill lämna "${household.name}"? Du måste få en ny inbjudningskod för att gå med igen.`,
+      [
+        { text: 'Avbryt', style: 'cancel' },
+        {
+          text: 'Lämna',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const result = await leaveHouseholdFirebase(household.id, currentUser?.id);
+              
+              if (result.success) {
+                showToast('Du har lämnat hushållet', 'success');
+                navigation.replace('HouseholdSetupScreen', {
+                  userId: currentUser?.id,
+                  email: currentUser?.email,
+                });
+              } else {
+                Alert.alert('Fel', result.error || 'Kunde inte lämna hushållet');
+              }
+            } catch (error) {
+              console.error('Error leaving household:', error);
+              Alert.alert('Fel', 'Kunde inte lämna hushållet');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const removeMember = (memberId) => {
+    const member = household.members.find(m => m.userId === memberId);
+    Alert.alert(
+      'Ta bort medlem?',
+      `Är du säker på att du vill ta bort ${member.email} från hushållet?`,
+      [
+        { text: 'Avbryt', style: 'cancel' },
+        {
+          text: 'Ta bort',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const result = await removeMemberFirebase(household.id, memberId, currentUser?.id);
+              
+              if (result.success) {
+                showToast('Medlem borttagen', 'success');
+              } else {
+                Alert.alert('Fel', result.error || 'Kunde inte ta bort medlem');
+              }
+            } catch (error) {
+              console.error('Error removing member:', error);
+              Alert.alert('Fel', 'Kunde inte ta bort medlem');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const isAdmin = household?.members.find(m => m.userId === currentUser?.id)?.role === 'admin';
+
+  if (loading) {
+    return null;
+  }
+
+  if (!household) {
+    return (
+      <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>Hushåll</Text>
+        <Text style={[styles.noHouseholdText, { color: theme.textSecondary }]}>
+          Du är inte med i något hushåll än
+        </Text>
+        <TouchableOpacity
+          style={[styles.setupButton, { backgroundColor: '#4ECDC4' }]}
+          onPress={() => navigation.navigate('HouseholdSetupScreen', {
+            userId: currentUser?.id,
+            email: currentUser?.email,
+          })}
+        >
+          <Text style={styles.setupButtonText}>Skapa eller gå med i hushåll</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>Hushåll</Text>
+        
+        {/* Hushållsnamn */}
+        <View style={styles.householdHeader}>
+          <Text style={styles.householdEmoji}>🏠</Text>
+          <View style={styles.householdInfo}>
+            <Text style={[styles.householdName, { color: theme.text }]}>{household.name}</Text>
+            <Text style={[styles.householdMemberCount, { color: theme.textSecondary }]}>
+              {household.members.length} {household.members.length === 1 ? 'medlem' : 'medlemmar'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Inbjudningskod */}
+        <View style={[styles.inviteCodeContainer, { backgroundColor: theme.inputBackground, borderColor: theme.border }]}>
+          <View>
+            <Text style={[styles.inviteCodeLabel, { color: theme.textSecondary }]}>Inbjudningskod</Text>
+            <Text style={[styles.inviteCode, { color: theme.text }]}>{household.inviteCode}</Text>
+          </View>
+          <View style={styles.inviteCodeButtons}>
+            <TouchableOpacity onPress={copyInviteCode} style={styles.iconButton}>
+              <Text style={styles.iconButtonText}>📋</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={shareInviteCode} style={styles.iconButton}>
+              <Text style={styles.iconButtonText}>📤</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Medlemmar */}
+        <TouchableOpacity
+          style={styles.settingRow}
+          onPress={() => setShowMembersModal(true)}
+        >
+          <Text style={[styles.settingLabel, { color: theme.text }]}>👥 Visa medlemmar ({household.members.length})</Text>
+          <Text style={[styles.settingArrow, { color: theme.textSecondary }]}>›</Text>
+        </TouchableOpacity>
+
+        {/* Lämna hushåll */}
+        <TouchableOpacity
+          style={styles.settingRow}
+          onPress={leaveHouseholdHandler}
+        >
+          <Text style={[styles.settingLabel, { color: '#FF6B6B' }]}>🚪 Lämna hushåll</Text>
+          <Text style={[styles.settingArrow, { color: theme.textSecondary }]}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Members Modal */}
+      <Modal
+        visible={showMembersModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowMembersModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.cardBackground }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Medlemmar i {household.name}</Text>
+            
+            <ScrollView style={styles.membersList}>
+              {household.members.map((member, index) => (
+                <View key={index} style={[styles.memberItem, { borderBottomColor: theme.border }]}>
+                  <View style={styles.memberInfo}>
+                    <Text style={[styles.memberEmail, { color: theme.text }]}>{member.email}</Text>
+                    <View style={styles.memberMeta}>
+                      {member.role === 'admin' && (
+                        <View style={[styles.adminBadge, { backgroundColor: '#FF6B6B' }]}>
+                          <Text style={styles.adminBadgeText}>Admin</Text>
+                        </View>
+                      )}
+                      {member.joinedAt && (
+                        <Text style={[styles.memberJoined, { color: theme.textSecondary }]}>
+                          Gick med {new Date(member.joinedAt).toLocaleDateString('sv-SE')}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                  {isAdmin && member.userId !== currentUser?.id && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setShowMembersModal(false);
+                        setTimeout(() => removeMember(member.userId), 300);
+                      }}
+                      style={styles.removeMemberButton}
+                    >
+                      <Text style={styles.removeMemberText}>Ta bort</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.modalCloseButton, { backgroundColor: '#4ECDC4' }]}
+              onPress={() => setShowMembersModal(false)}
+            >
+              <Text style={styles.modalCloseButtonText}>Stäng</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+}
 
 export default function ProfilePage({ navigation }) {
   const { theme, isDarkMode, toggleTheme } = useTheme();
@@ -139,7 +393,7 @@ export default function ProfilePage({ navigation }) {
     
     try {
       // TODO: Byt till din server-URL när du deployar
-      const API_URL = __DEV__ ? 'http://192.168.1.241:3000' : 'https://your-api.com';
+      const API_URL = __DEV__ ? 'http://192.168.1.246:3000' : 'https://your-api.com';
       
       const response = await fetch(`${API_URL}/api/auth/send-2fa-code`, {
         method: 'POST',
@@ -507,6 +761,9 @@ export default function ProfilePage({ navigation }) {
             </Text>
           </View>
         </View>
+
+        {/* Household Section */}
+        <HouseholdSection theme={theme} navigation={navigation} currentUser={currentUser} showToast={showToast} />
 
         {/* Inställningar Section */}
         <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
@@ -1399,5 +1656,153 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 10,
     fontStyle: 'italic',
+  },
+  // Household styles
+  noHouseholdText: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginVertical: 16,
+  },
+  setupButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  setupButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  householdHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  householdEmoji: {
+    fontSize: 48,
+    marginRight: 16,
+  },
+  householdInfo: {
+    flex: 1,
+  },
+  householdName: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  householdMemberCount: {
+    fontSize: 14,
+  },
+  inviteCodeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  inviteCodeLabel: {
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  inviteCode: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    letterSpacing: 4,
+  },
+  inviteCodeButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(78, 205, 196, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconButtonText: {
+    fontSize: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  membersList: {
+    maxHeight: 400,
+  },
+  memberItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  memberInfo: {
+    flex: 1,
+  },
+  memberEmail: {
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  memberMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  adminBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  adminBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  memberJoined: {
+    fontSize: 12,
+  },
+  removeMemberButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+  },
+  removeMemberText: {
+    color: '#FF6B6B',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  modalCloseButton: {
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  modalCloseButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

@@ -33,6 +33,12 @@ export default function RegisterScreen({ navigation }) {
     avatar: '👤',
   });
   const [loading, setLoading] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [generatedCode, setGeneratedCode] = useState('');
+  const [codeExpiry, setCodeExpiry] = useState(null);
+  const [verificationError, setVerificationError] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   const handleRegister = async () => {
     // Validering
@@ -51,6 +57,79 @@ export default function RegisterScreen({ navigation }) {
       return;
     }
 
+    // Skicka 2FA-kod till email
+    setLoading(true);
+    await sendVerificationCode();
+    setLoading(false);
+  };
+
+  const sendVerificationCode = async () => {
+    // Generera 6-siffrig kod
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setGeneratedCode(code);
+    
+    // Sätt utgångstid (5 minuter)
+    const expiry = new Date();
+    expiry.setMinutes(expiry.getMinutes() + 5);
+    setCodeExpiry(expiry);
+    
+    try {
+      const API_URL = __DEV__ ? 'http://192.168.1.246:3000' : 'https://your-api.com';
+      
+      const response = await fetch(`${API_URL}/api/auth/send-2fa-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: formData.email.trim().toLowerCase(),
+          code: code,
+          userId: 'registration-' + Date.now(),
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setShowVerificationModal(true);
+        setVerificationError('');
+        // Starta cooldown för resend (60 sekunder)
+        setResendCooldown(60);
+        const interval = setInterval(() => {
+          setResendCooldown((prev) => {
+            if (prev <= 1) {
+              clearInterval(interval);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      } else {
+        Alert.alert('Fel', 'Kunde inte skicka verifieringskod. Försök igen.');
+      }
+    } catch (error) {
+      console.error('Send verification error:', error);
+      Alert.alert('Fel', 'Kunde inte skicka verifieringskod. Kontrollera din internetanslutning.');
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    if (!verificationCode || verificationCode.length !== 6) {
+      setVerificationError('Ange en 6-siffrig kod');
+      return;
+    }
+
+    // Kolla om koden har gått ut
+    if (codeExpiry && new Date() > codeExpiry) {
+      setVerificationError('Koden har gått ut. Begär en ny kod.');
+      return;
+    }
+
+    // Verifiera kod
+    if (verificationCode !== generatedCode) {
+      setVerificationError('Felaktig kod. Försök igen.');
+      return;
+    }
+
+    // Kod är korrekt - skapa kontot
     setLoading(true);
     const result = await register({
       name: formData.name.trim(),
@@ -63,8 +142,24 @@ export default function RegisterScreen({ navigation }) {
 
     if (!result.success) {
       Alert.alert('Registrering misslyckades', result.error);
+      setShowVerificationModal(false);
+      return;
     }
-    // Om success är true kommer användaren automatiskt loggas in via AuthContext
+    
+    // Kod verifierad och konto skapat - navigera till hushållsinställning
+    setShowVerificationModal(false);
+    navigation.replace('HouseholdSetupScreen', {
+      userId: result.user?.id,
+      email: formData.email.trim().toLowerCase(),
+    });
+  };
+
+  const handleResendCode = async () => {
+    if (resendCooldown > 0) return;
+    
+    setVerificationCode('');
+    setVerificationError('');
+    await sendVerificationCode();
   };
   
   const handleGoogleRegister = async () => {
@@ -267,6 +362,87 @@ export default function RegisterScreen({ navigation }) {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* 2FA Verification Modal */}
+      {showVerificationModal && (
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.cardBackground }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Verifiera din email</Text>
+            <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
+              Vi har skickat en 6-siffrig kod till
+            </Text>
+            <Text style={[styles.modalEmail, { color: theme.primary }]}>
+              {formData.email}
+            </Text>
+
+            <TextInput
+              style={[
+                styles.codeInput,
+                {
+                  backgroundColor: theme.background,
+                  color: theme.text,
+                  borderColor: verificationError ? theme.error : theme.border,
+                },
+              ]}
+              placeholder="000000"
+              placeholderTextColor={theme.textTertiary}
+              value={verificationCode}
+              onChangeText={(text) => {
+                setVerificationCode(text.replace(/[^0-9]/g, '').slice(0, 6));
+                setVerificationError('');
+              }}
+              keyboardType="number-pad"
+              maxLength={6}
+              autoFocus
+            />
+
+            {verificationError ? (
+              <Text style={[styles.errorText, { color: theme.error }]}>{verificationError}</Text>
+            ) : null}
+
+            {codeExpiry && (
+              <Text style={[styles.expiryText, { color: theme.textSecondary }]}>
+                Koden går ut om {Math.max(0, Math.ceil((codeExpiry - new Date()) / 60000))} minuter
+              </Text>
+            )}
+
+            <TouchableOpacity
+              style={[
+                styles.verifyButton,
+                { backgroundColor: theme.primary },
+                loading && styles.registerButtonDisabled,
+              ]}
+              onPress={handleVerifyCode}
+              disabled={loading}
+            >
+              <Text style={[styles.verifyButtonText, { color: theme.textInverse }]}>
+                {loading ? 'Verifierar...' : 'Verifiera och skapa konto'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.resendButton}
+              onPress={handleResendCode}
+              disabled={resendCooldown > 0}
+            >
+              <Text style={[styles.resendButtonText, { color: resendCooldown > 0 ? theme.textTertiary : theme.primary }]}>
+                {resendCooldown > 0 ? `Skicka ny kod om ${resendCooldown}s` : 'Skicka ny kod'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => {
+                setShowVerificationModal(false);
+                setVerificationCode('');
+                setVerificationError('');
+              }}
+            >
+              <Text style={[styles.cancelButtonText, { color: theme.textSecondary }]}>Avbryt</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -428,5 +604,92 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#1F2937',
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  modalEmail: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  codeInput: {
+    fontSize: 24,
+    fontWeight: '700',
+    textAlign: 'center',
+    borderWidth: 2,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
+    letterSpacing: 8,
+  },
+  errorText: {
+    fontSize: 12,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  expiryText: {
+    fontSize: 12,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  verifyButton: {
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  verifyButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  resendButton: {
+    padding: 12,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  resendButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  cancelButton: {
+    padding: 12,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });

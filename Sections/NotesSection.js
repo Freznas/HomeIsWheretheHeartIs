@@ -1,9 +1,22 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useTheme } from '../context/ThemeContext';
+import { useNotesData } from '../hooks/useAsyncStorage';
 
 export default function NotesSection({ navigation }) {
   const { theme } = useTheme();
+  const [notes] = useNotesData();
+  const [noteCount, setNoteCount] = useState(0);
+
+  useEffect(() => {
+    if (notes && notes.length > 0) {
+      // Räkna totalt antal anteckningar
+      setNoteCount(notes.length);
+    } else {
+      setNoteCount(0);
+    }
+  }, [notes]);
+
   return (
     <TouchableOpacity
       activeOpacity={0.85}
@@ -15,8 +28,12 @@ export default function NotesSection({ navigation }) {
         <Text style={[styles.title, { color: theme.text }]}>Anteckningar</Text>
       </View>
       <View style={styles.content}>
-        <Text style={[styles.itemCount, { color: theme.warning }]}>6 anteckningar</Text>
-        <Text style={[styles.lastNote, { color: theme.textSecondary }]}>Senast: Handla mat</Text>
+        <Text style={[styles.itemCount, { color: theme.warning }]}>
+          {noteCount} {noteCount === 1 ? 'anteckning' : 'anteckningar'}
+        </Text>
+        <Text style={[styles.lastNote, { color: theme.textSecondary }]}>
+          {noteCount > 0 ? 'Tryck för att visa' : 'Inga anteckningar'}
+        </Text>
       </View>
       <View style={[styles.statusBadge, { backgroundColor: theme.warning + '20' }]}>
         <Text style={[styles.statusText, { color: theme.warning }]}>Aktuell</Text>

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,16 +11,22 @@ import {
   TextInput,
   KeyboardAvoidingView,
   ScrollView,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from "@react-native-picker/picker";
-import { useShoppingListData } from '../hooks/useAsyncStorage';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { getUserHousehold, subscribeToShoppingList, addShoppingListItem, updateShoppingListItem, deleteShoppingListItem } from '../config/firebase';
 
 export default function ShoppingListPage({ navigation }) {
   const { theme } = useTheme();
-  // 💾 AsyncStorage hook - hanterar all data automatiskt
-  const [items, setItems, removeShoppingData, loading] = useShoppingListData();
+  const { currentUser } = useAuth();
+  
+  // 🔥 Firebase state - realtidsuppdatering
+  const [items, setItems] = useState([]);
+  const [householdId, setHouseholdId] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [newItemName, setNewItemName] = useState("");
   const [newItemQuantity, setNewItemQuantity] = useState("");
@@ -35,42 +41,91 @@ export default function ShoppingListPage({ navigation }) {
     { label: 'burk', value: 'burk', icon: '🥫' },
   ];
 
-  const toggleComplete = (id) => {
-    // 🔄 Uppdatera completed status (sparas automatiskt till AsyncStorage)
-    setItems(currentItems => 
-      currentItems.map(item => 
-        item.id === id ? { ...item, completed: !item.completed } : item
-      )
-    );
-  };
+  // 🔥 Load household and setup real-time listener
+  useEffect(() => {
+    loadHouseholdAndShoppingList();
+  }, []);
 
-  const addItem = () => {
-    if (newItemName.trim()) {
-      const quantityText = newItemQuantity.trim() || "1";
-      const quantityString = `${quantityText} ${newItemUnit}`;
-      
-      // ➞ Lägg till ny vara (sparas automatiskt till AsyncStorage)
-      setItems(currentItems => [
-        ...currentItems,
-        {
-          id: Date.now().toString(),
-          name: newItemName.trim(),
-          quantity: quantityString,
-          completed: false,
-          category: "Övrigt"
-        }
-      ]);
-      setNewItemName("");
-      setNewItemQuantity("");
-      setNewItemUnit("st");
-      setShowUnitPicker(false);
-      setModalVisible(false);
+  useEffect(() => {
+    if (!householdId) return;
+
+    // Lyssna på realtidsuppdateringar från Firebase
+    const unsubscribe = subscribeToShoppingList(householdId, (result) => {
+      if (result.success) {
+        setItems(result.items || []);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [householdId]);
+
+  const loadHouseholdAndShoppingList = async () => {
+    if (!currentUser?.id) {
+      setLoading(false);
+      return;
+    }
+
+    const result = await getUserHousehold(currentUser.id);
+    if (result.success && result.household) {
+      setHouseholdId(result.household.id);
+    } else {
+      setLoading(false);
     }
   };
 
-  const deleteItem = (id) => {
-    // 🗑️ Ta bort vara (sparas automatiskt till AsyncStorage)
-    setItems(currentItems => currentItems.filter(item => item.id !== id));
+  const toggleComplete = async (id) => {
+    if (!householdId) return;
+    
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+
+    // 🔥 Uppdatera completed status i Firebase
+    await updateShoppingListItem(householdId, id, {
+      completed: !item.completed
+    });
+  };
+
+  const addItem = async () => {
+    if (!newItemName.trim()) return;
+    
+    if (!householdId) {
+      Alert.alert('Fel', 'Du måste vara med i ett hushåll för att lägga till varor.');
+      return;
+    }
+
+    const quantityText = newItemQuantity.trim() || "1";
+    const quantityString = `${quantityText} ${newItemUnit}`;
+    
+    // 🔥 Lägg till ny vara i Firebase
+    const result = await addShoppingListItem(householdId, {
+      name: newItemName.trim(),
+      quantity: quantityString,
+      completed: false,
+      category: "Övrigt"
+    });
+    
+    if (!result.success) {
+      Alert.alert('Fel', result.error || 'Kunde inte lägga till vara');
+      return;
+    }
+    
+    setNewItemName("");
+    setNewItemQuantity("");
+    setNewItemUnit("st");
+    setShowUnitPicker(false);
+    setModalVisible(false);
+  };
+
+  const deleteItem = async (id) => {
+    if (!householdId) return;
+    
+    // 🔥 Ta bort vara från Firebase
+    const result = await deleteShoppingListItem(householdId, id);
+    
+    if (!result.success) {
+      Alert.alert('Fel', result.error || 'Kunde inte ta bort vara');
+    }
   };
 
   const renderItem = ({ item }) => (
@@ -104,9 +159,43 @@ export default function ShoppingListPage({ navigation }) {
   // Loading state
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text>Laddar inköpslista...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+        <Text style={[styles.loadingText, { color: theme.text }]}>Laddar inköpslista...</Text>
       </View>
+    );
+  }
+
+  if (!householdId) {
+    return (
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+        <StatusBar barStyle={theme.statusBar} backgroundColor={theme.headerBackground} />
+        <View style={[styles.header, { backgroundColor: theme.headerBackground }]}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={[styles.backIcon, { color: theme.headerText }]}>←</Text>
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Text style={[styles.headerTitle, { color: theme.headerText }]}>Inköpslista</Text>
+          </View>
+        </View>
+        <View style={[styles.container, { backgroundColor: theme.background }]}>
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyIcon}>🏠</Text>
+            <Text style={[styles.emptyText, { color: theme.text }]}>Du måste vara med i ett hushåll</Text>
+            <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
+              Gå till Profil och skapa eller gå med i ett hushåll först
+            </Text>
+            <TouchableOpacity 
+              style={[styles.goToProfileButton, { backgroundColor: theme.primary }]}
+              onPress={() => navigation.navigate('Profile')}
+            >
+              <Text style={styles.goToProfileText}>Gå till Profil</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -574,6 +663,47 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#3949ab',
     fontWeight: 'bold',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  emptyText: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  goToProfileButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  goToProfileText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+    paddingBottom: 100,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 20,
   },
 });
 

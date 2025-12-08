@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   View, 
   Text, 
@@ -10,18 +10,24 @@ import {
   KeyboardAvoidingView, 
   Platform,
   StatusBar,
-  ScrollView
+  ScrollView,
+  Alert
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from "@react-native-picker/picker";
-import { usePantryData } from '../hooks/useAsyncStorage';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { getUserHousehold, subscribeToPantry, addPantryItem, updatePantryItem, deletePantryItem } from '../config/firebase';
 
 
 export default function PantryPage({ navigation }) {
   const { theme } = useTheme();
-  // 💾 AsyncStorage hook - hanterar all data automatiskt
-  const [pantryItems, setPantryItems, removePantryData, loading] = usePantryData();
+  const { currentUser } = useAuth();
+  
+  // 🔥 Firebase state - realtidsuppdatering
+  const [pantryItems, setPantryItems] = useState([]);
+  const [householdId, setHouseholdId] = useState(null);
+  const [loading, setLoading] = useState(true);
   
   // Modal states
   const [modalVisible, setModalVisible] = useState(false);
@@ -32,6 +38,8 @@ export default function PantryPage({ navigation }) {
   const [newCategory, setNewCategory] = useState("");
   const [errors, setErrors] = useState({});
   const [showUnitPicker, setShowUnitPicker] = useState(false);
+  const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
+  const [categorySuggestions, setCategorySuggestions] = useState([]);
   
   const units = [
     { label: 'st', value: 'st', icon: '📦' },
@@ -40,6 +48,154 @@ export default function PantryPage({ navigation }) {
     { label: 'paket', value: 'paket', icon: '🎁' },
     { label: 'burk', value: 'burk', icon: '🥫' },
   ];
+
+  // 🔥 Load household and setup real-time listener
+  useEffect(() => {
+    loadHouseholdAndPantry();
+  }, []);
+
+  useEffect(() => {
+    if (!householdId) return;
+
+    // Lyssna på realtidsuppdateringar från Firebase
+    const unsubscribe = subscribeToPantry(householdId, (result) => {
+      if (result.success) {
+        setPantryItems(result.items || []);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [householdId]);
+
+  const loadHouseholdAndPantry = async () => {
+    if (!currentUser?.id) {
+      setLoading(false);
+      return;
+    }
+
+    const result = await getUserHousehold(currentUser.id);
+    if (result.success && result.household) {
+      setHouseholdId(result.household.id);
+    } else {
+      setLoading(false);
+    }
+  };
+
+  // Produkt-databas för automatisk kategori-igenkänning
+  const productDatabase = {
+    'Frukt & Grönt': [
+      'äpple', 'banan', 'apelsin', 'päron', 'vindruvor', 'jordgubbar', 'blåbär', 'hallon',
+      'melon', 'vattenmelon', 'ananas', 'mango', 'kiwi', 'citron', 'lime', 'persika',
+      'tomat', 'gurka', 'paprika', 'lök', 'vitlök', 'morot', 'potatis', 'sallad',
+      'broccoli', 'blomkål', 'spenat', 'kål', 'zucchini', 'aubergine', 'pumpa',
+      'avokado', 'chili', 'ingefära', 'purjolök', 'selleri', 'rädisa', 'rödlök'
+    ],
+    'Mejeri': [
+      'mjölk', 'filmjölk', 'yoghurt', 'grädde', 'matlagningsgrädde', 'vispgrädde',
+      'ost', 'smör', 'margarin', 'crème fraiche', 'kvarg', 'kesella', 'ägg'
+    ],
+    'Kött & Fisk': [
+      'kyckling', 'köttfärs', 'bacon', 'korv', 'fläskfilé', 'fläskkotlett', 'entrecote',
+      'oxfilé', 'lax', 'torsk', 'räkor', 'tonfisk', 'makrill', 'köttbullar', 'kött'
+    ],
+    'Bröd & Bageri': [
+      'bröd', 'toast', 'frallor', 'hamburgerbröd', 'tortilla', 'pitabröd',
+      'croissant', 'bulle', 'kaka', 'tårta', 'knäckebröd'
+    ],
+    'Skafferi': [
+      'pasta', 'ris', 'couscous', 'bulgur', 'quinoa', 'müsli', 'havregryn',
+      'mjöl', 'socker', 'salt', 'peppar', 'kryddor', 'olja', 'olivolja',
+      'ketchup', 'senap', 'majonnäs', 'sås', 'buljong', 'tomatpuré', 'passata',
+      'konserver', 'linser', 'bönor', 'kikärtor', 'nötter', 'mandel'
+    ],
+    'Dryck': [
+      'juice', 'läsk', 'vatten', 'kaffe', 'te', 'öl', 'vin', 'saft', 'mjölk'
+    ],
+    'Frys': [
+      'glass', 'pizza', 'frysta grönsaker', 'frysta bär', 'glass', 'pommes'
+    ]
+  };
+
+  // Normalisera sträng för kategori-matchning
+  const normalizeString = (str) => {
+    return str
+      .toLowerCase()
+      .replace(/&/g, 'och')
+      .replace(/\s+/g, '') // Ta bort alla mellanslag
+      .replace(/[^a-zåäö]/g, ''); // Behåll bara bokstäver
+  };
+
+  // Automatisk produkt-igenkänning
+  const detectProductCategory = (productName) => {
+    if (!productName || productName.trim().length < 2) return null;
+    
+    const normalized = productName.toLowerCase().trim();
+    
+    // Sök igenom alla kategorier
+    for (const [category, products] of Object.entries(productDatabase)) {
+      for (const product of products) {
+        if (normalized.includes(product) || product.includes(normalized)) {
+          return category;
+        }
+      }
+    }
+    
+    return null;
+  };
+
+  // Hitta matchande kategori bland befintliga
+  const findMatchingCategory = (input) => {
+    if (!input || input.trim().length < 2) return null;
+    
+    const normalized = normalizeString(input);
+    const existingCategories = [...new Set(pantryItems.map(item => item.category).filter(Boolean))];
+    
+    // Hitta exakt matchning eller liknande
+    for (const category of existingCategories) {
+      const categoryNormalized = normalizeString(category);
+      if (categoryNormalized === normalized || categoryNormalized.includes(normalized) || normalized.includes(categoryNormalized)) {
+        return category;
+      }
+    }
+    return null;
+  };
+
+  // Hantera produktnamn-ändring med automatisk kategori-detektion
+  const handleProductNameChange = (text) => {
+    setNewName(text);
+    if (errors.name) setErrors({ ...errors, name: undefined });
+    
+    // Auto-fyll kategori baserat på produktnamn (endast för nya produkter, inte vid redigering)
+    if (text.trim().length >= 3 && !newCategory && !editingItem) {
+      const detectedCategory = detectProductCategory(text);
+      if (detectedCategory) {
+        setNewCategory(detectedCategory);
+      }
+    }
+  };
+
+  // Uppdatera kategori-förslag när användaren skriver
+  const handleCategoryChange = (text) => {
+    setNewCategory(text);
+    if (errors.category) setErrors({ ...errors, category: undefined });
+    
+    if (text.trim().length >= 2) {
+      const existingCategories = [...new Set(pantryItems.map(item => item.category).filter(Boolean))];
+      const normalized = normalizeString(text);
+      
+      const suggestions = existingCategories.filter(category => {
+        const categoryNormalized = normalizeString(category);
+        return categoryNormalized.includes(normalized) || normalized.includes(categoryNormalized);
+      });
+      
+      setCategorySuggestions(suggestions);
+      setShowCategorySuggestions(suggestions.length > 0);
+    } else {
+      setShowCategorySuggestions(false);
+      setCategorySuggestions([]);
+    }
+  };
   // Gruppera items per kategori från AsyncStorage data
   const groupedPantry = (pantryItems || []).reduce((acc, item) => {
     const category = item.category || "Okategoriserat";
@@ -52,9 +208,43 @@ export default function PantryPage({ navigation }) {
 
  if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text>Laddar skafferidata...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+        <Text style={[styles.loadingText, { color: theme.text }]}>Laddar skafferidata...</Text>
       </View>
+    );
+  }
+
+  if (!householdId) {
+    return (
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+        <StatusBar barStyle={theme.statusBar} backgroundColor={theme.headerBackground} />
+        <View style={[styles.header, { backgroundColor: theme.headerBackground }]}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={[styles.backIcon, { color: theme.headerText }]}>←</Text>
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Text style={[styles.headerTitle, { color: theme.headerText }]}>Skafferi</Text>
+          </View>
+        </View>
+        <View style={[styles.container, { backgroundColor: theme.background }]}>
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyIcon}>🏠</Text>
+            <Text style={[styles.emptyText, { color: theme.text }]}>Du måste vara med i ett hushåll</Text>
+            <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
+              Gå till Profil och skapa eller gå med i ett hushåll först
+            </Text>
+            <TouchableOpacity 
+              style={[styles.goToProfileButton, { backgroundColor: theme.primary }]}
+              onPress={() => navigation.navigate('Profile')}
+            >
+              <Text style={styles.goToProfileText}>Gå till Profil</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -131,7 +321,7 @@ export default function PantryPage({ navigation }) {
     setModalVisible(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     let newErrors = {};
     if (!newName.trim()) newErrors.name = "Fyll i produktnamn";
     if (!newQuantity.trim()) newErrors.quantity = "Fyll i mängd";
@@ -141,44 +331,55 @@ export default function PantryPage({ navigation }) {
 
     if (Object.keys(newErrors).length > 0) return;
 
+    if (!householdId) {
+      Alert.alert('Fel', 'Du måste vara med i ett hushåll för att lägga till varor.');
+      return;
+    }
+
+    // Använd matchad kategori om den finns
+    const matchedCategory = findMatchingCategory(newCategory) || newCategory.trim();
+
     if (editingItem) {
-      // 🔄 Uppdatera befintlig vara (sparas automatiskt till AsyncStorage)
-      setPantryItems(currentItems => 
-        currentItems.map(item => 
-          item.id === editingItem.id 
-            ? {
-                ...item,
-                name: newName.trim(),
-                quantity: newQuantity.trim(),
-                unit: newUnit,
-                category: newCategory.trim(),
-              }
-            : item
-        )
-      );
+      // 🔥 Uppdatera befintlig vara i Firebase
+      const result = await updatePantryItem(householdId, editingItem.id, {
+        name: newName.trim(),
+        quantity: newQuantity.trim(),
+        unit: newUnit,
+        category: matchedCategory,
+      });
+      
+      if (!result.success) {
+        Alert.alert('Fel', result.error || 'Kunde inte uppdatera vara');
+        return;
+      }
     } else {
-      // ➕ Lägg till ny vara (sparas automatiskt till AsyncStorage)
-      setPantryItems(currentItems => [
-        ...currentItems,
-        {
-          id: Date.now().toString(),
-          name: newName.trim(),
-          quantity: newQuantity.trim(),
-          unit: newUnit,
-          category: newCategory.trim(),
-        },
-      ]);
+      // 🔥 Lägg till ny vara i Firebase
+      const result = await addPantryItem(householdId, {
+        name: newName.trim(),
+        quantity: newQuantity.trim(),
+        unit: newUnit,
+        category: matchedCategory,
+      });
+      
+      if (!result.success) {
+        Alert.alert('Fel', result.error || 'Kunde inte lägga till vara');
+        return;
+      }
     }
 
     resetModal();
   };
 
-  const handleDelete = () => {
-    if (editingItem) {
-      // 🗑️ Ta bort vara (sparas automatiskt till AsyncStorage)
-      setPantryItems(currentItems => 
-        currentItems.filter(item => item.id !== editingItem.id)
-      );
+  const handleDelete = async () => {
+    if (editingItem && householdId) {
+      // 🔥 Ta bort vara från Firebase
+      const result = await deletePantryItem(householdId, editingItem.id);
+      
+      if (!result.success) {
+        Alert.alert('Fel', result.error || 'Kunde inte ta bort vara');
+        return;
+      }
+      
       resetModal();
     }
   };
@@ -191,6 +392,8 @@ export default function PantryPage({ navigation }) {
     setEditingItem(null);
     setErrors({});
     setModalVisible(false);
+    setShowCategorySuggestions(false);
+    setCategorySuggestions([]);
   };
 
   return (
@@ -264,13 +467,10 @@ export default function PantryPage({ navigation }) {
                 <Text style={[styles.inputLabel, { color: theme.text }]}>Produktnamn</Text>
                 <TextInput
                   style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text, borderColor: theme.border }, errors.name && styles.inputError]}
-                  placeholder="T.ex. Mjölk, Bröd..."
+                  placeholder="T.ex. Mjölk, Bröd, Äpple..."
                   placeholderTextColor={theme.textSecondary}
                   value={newName}
-                  onChangeText={text => {
-                    setNewName(text);
-                    if (errors.name) setErrors({ ...errors, name: undefined });
-                  }}
+                  onChangeText={handleProductNameChange}
                 />
                 {errors.name && <Text style={[styles.errorText, { color: theme.error }]}>{errors.name}</Text>}
               </View>
@@ -344,11 +544,26 @@ export default function PantryPage({ navigation }) {
                   placeholder="T.ex. Mejeri, Bageri..."
                   placeholderTextColor={theme.textSecondary}
                   value={newCategory}
-                  onChangeText={text => {
-                    setNewCategory(text);
-                    if (errors.category) setErrors({ ...errors, category: undefined });
-                  }}
+                  onChangeText={handleCategoryChange}
                 />
+                {showCategorySuggestions && categorySuggestions.length > 0 && (
+                  <View style={[styles.suggestionsContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                    <Text style={[styles.suggestionsTitle, { color: theme.textSecondary }]}>Föreslagna kategorier:</Text>
+                    {categorySuggestions.map((suggestion, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        style={[styles.suggestionItem, { borderBottomColor: theme.border }]}
+                        onPress={() => {
+                          setNewCategory(suggestion);
+                          setShowCategorySuggestions(false);
+                        }}
+                      >
+                        <Text style={[styles.suggestionText, { color: theme.text }]}>{suggestion}</Text>
+                        <Text style={styles.suggestionIcon}>→</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
                 {errors.category && <Text style={[styles.errorText, { color: theme.error }]}>{errors.category}</Text>}
               </View>
             </ScrollView>
@@ -750,6 +965,79 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     textAlign: "center",
     lineHeight: 24,
+  },
+  suggestionsContainer: {
+    position: 'absolute',
+    top: 70,
+    left: 0,
+    right: 0,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    maxHeight: 150,
+    zIndex: 1000,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  suggestionsTitle: {
+    fontSize: 11,
+    color: '#6b7280',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 4,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: 0,
+  },
+  suggestionText: {
+    fontSize: 14,
+    color: '#1f2937',
+  },
+  suggestionIcon: {
+    fontSize: 16,
+    color: '#9ca3af',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  emptyText: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  goToProfileButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  goToProfileText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

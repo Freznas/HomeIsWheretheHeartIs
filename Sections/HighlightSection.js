@@ -12,7 +12,35 @@ export default function HighlightSection({ navigation }) {
   const scrollViewRef = useRef(null);
   const currentIndexRef = useRef(0);
   const [localEvents, setLocalEvents] = useState([]);
-  const scheduledEventsRef = useRef(new Set()); // Håll koll på vilka events som redan fått notifikationer
+  const [scheduledEventKeys, setScheduledEventKeys] = useState(new Set());
+
+  // Ladda scheduledEventKeys från AsyncStorage när komponenten mountas
+  useEffect(() => {
+    const loadScheduledEvents = async () => {
+      try {
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        const stored = await AsyncStorage.getItem('scheduled_event_notifications');
+        if (stored) {
+          setScheduledEventKeys(new Set(JSON.parse(stored)));
+        }
+      } catch (error) {
+        console.error('Error loading scheduled events:', error);
+      }
+    };
+    loadScheduledEvents();
+  }, []);
+
+  // Spara scheduledEventKeys till AsyncStorage när det ändras
+  const saveScheduledEventKey = async (eventKey) => {
+    try {
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+      const newKeys = new Set([...scheduledEventKeys, eventKey]);
+      setScheduledEventKeys(newKeys);
+      await AsyncStorage.setItem('scheduled_event_notifications', JSON.stringify([...newKeys]));
+    } catch (error) {
+      console.error('Error saving scheduled event key:', error);
+    }
+  };
 
   // Synka events till local state och schemalägg notifikationer
   useEffect(() => {
@@ -28,17 +56,17 @@ export default function HighlightSection({ navigation }) {
         const eventKey = `${event.id || event.title}-${event.date}`; // Unik nyckel för eventet
         
         // Schemalägg bara för events inom 24 timmar framåt och som inte redan schemalagts
-        if (eventDate > now && eventDate <= twentyFourHoursFromNow && !scheduledEventsRef.current.has(eventKey)) {
+        if (eventDate > now && eventDate <= twentyFourHoursFromNow && !scheduledEventKeys.has(eventKey)) {
           scheduleEventReminder(event).then(notificationId => {
             if (notificationId) {
-              scheduledEventsRef.current.add(eventKey); // Markera som schemalagd
+              saveScheduledEventKey(eventKey); // Spara att vi schemalagt denna
               console.log(`Notifikation schemalagd för event: ${event.title}`);
             }
           });
         }
       });
     }
-  }, [events]);
+  }, [events, scheduledEventKeys]);
 
   // Lyssna på navigation state changes och ladda om data när användaren kommer tillbaka
   useEffect(() => {

@@ -32,6 +32,7 @@ import WeatherPage from './Pages/WeatherPage';             // Väder sidan
 import ProfilePage from './Pages/ProfilePage';             // Profilsidan
 import LoginScreen from './Pages/LoginScreen';             // Inloggningssidan
 import RegisterScreen from './Pages/RegisterScreen';       // Registreringssidan
+import HouseholdSetupScreen from './Pages/HouseholdSetupScreen'; // Hushållsinställning
 
 // STEG 3: Skapa Stack Navigator
 // Stack = "hög av papper" - nya sidor läggs på toppen, kan "pop" tillbaka till föregående
@@ -67,6 +68,7 @@ function NavigationContent() {
         <Stack.Screen name="CalendarPage" component={CalendarPage} />
         <Stack.Screen name="WeatherPage" component={WeatherPage} />
         <Stack.Screen name="ProfilePage" component={ProfilePage} />
+        <Stack.Screen name="HouseholdSetupScreen" component={HouseholdSetupScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Register" component={RegisterScreen} />
         </>
@@ -75,6 +77,7 @@ function NavigationContent() {
         <>
           <Stack.Screen name="LoginScreen" component={LoginScreen} />
           <Stack.Screen name="RegisterScreen" component={RegisterScreen} />
+          <Stack.Screen name="HouseholdSetupScreen" component={HouseholdSetupScreen} />
         </>
       )}
     </Stack.Navigator>

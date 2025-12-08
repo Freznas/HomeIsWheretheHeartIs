@@ -1,9 +1,53 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useTheme } from '../context/ThemeContext';
+import { useBillsData } from '../hooks/useAsyncStorage';
 
 export default function BillsSection({ navigation }) {
   const { theme } = useTheme();
+  const [bills] = useBillsData();
+  const [nextBill, setNextBill] = useState(null);
+  const [billCount, setBillCount] = useState(0);
+
+  useEffect(() => {
+    if (bills && bills.length > 0) {
+      // Räkna totalt antal räkningar
+      setBillCount(bills.length);
+      
+      // Hitta nästa räkning att betala (ej betald, närmast förfallodatum)
+      const unpaid = bills
+        .filter(b => b.status === "Ej betald" && b.dueDate)
+        .map(b => ({
+          ...b,
+          dueDateObj: parseDueDate(b.dueDate)
+        }))
+        .filter(b => b.dueDateObj)
+        .sort((a, b) => a.dueDateObj - b.dueDateObj);
+      
+      setNextBill(unpaid.length > 0 ? unpaid[0] : null);
+    } else {
+      setBillCount(0);
+      setNextBill(null);
+    }
+  }, [bills]);
+
+  // Hjälpfunktion för att parsa förfallodatum
+  const parseDueDate = (dateStr) => {
+    try {
+      // Format: "2025-12-15" eller "15/12"
+      if (dateStr.includes('-')) {
+        return new Date(dateStr);
+      } else if (dateStr.includes('/')) {
+        const [day, month] = dateStr.split('/');
+        const year = new Date().getFullYear();
+        return new Date(year, parseInt(month) - 1, parseInt(day));
+      }
+    } catch (e) {
+      return null;
+    }
+    return null;
+  };
+
   return (
     <TouchableOpacity
       activeOpacity={0.85}
@@ -15,8 +59,12 @@ export default function BillsSection({ navigation }) {
         <Text style={[styles.title, { color: theme.text }]}>Räkningar</Text>
       </View>
       <View style={styles.content}>
-        <Text style={[styles.itemCount, { color: theme.error }]}>4 räkningar</Text>
-        <Text style={[styles.dueInfo, { color: theme.textSecondary }]}>2 förfaller snart</Text>
+        <Text style={[styles.itemCount, { color: theme.error }]}>
+          {billCount} {billCount === 1 ? 'räkning' : 'räkningar'}
+        </Text>
+        <Text style={[styles.dueInfo, { color: theme.textSecondary }]}>
+          {nextBill ? `Nästa: ${nextBill.name}` : 'Inga räkningar'}
+        </Text>
       </View>
       <View style={[styles.statusBadge, { backgroundColor: theme.error + '20' }]}>
         <Text style={[styles.statusText, { color: theme.error }]}>Uppmärksamhet</Text>

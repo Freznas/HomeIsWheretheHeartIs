@@ -95,7 +95,7 @@ export const AuthProvider = ({ children }) => {
       setCurrentUser(userToSave);
       setIsLoggedIn(true);
 
-      return { success: true };
+      return { success: true, user: userToSave };
     } catch (error) {
       console.error('Registration error:', error);
       return { success: false, error: 'Ett fel uppstod vid registrering' };
