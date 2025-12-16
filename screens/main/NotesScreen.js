@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNotesData } from '../hooks/useAsyncStorage';
-import { useTheme } from '../context/ThemeContext';
+import { useNotesData } from '../../hooks/useAsyncStorage';
+import { useTheme } from '../../context/ThemeContext';
+import HeaderView from '../../components/common/HeaderView';
 
 export default function NotesPage({ navigation }) {
   // 💾 AsyncStorage hook - hanterar all data automatiskt
@@ -102,9 +102,13 @@ export default function NotesPage({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+    <HeaderView
+      title="Anteckningar"
+      onBackPress={() => navigation.goBack()}
+      onProfilePress={() => navigation.navigate('Profile')}
+      onSupportPress={() => navigation.navigate('Support')}
+    >
       <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <Text style={[styles.title, { color: theme.text }]}>Anteckningar</Text>
         <FlatList
           data={notesList}
           keyExtractor={item => item.id}
@@ -175,24 +179,14 @@ export default function NotesPage({ navigation }) {
           </KeyboardAvoidingView>
         </Modal>
       </View>
-    </SafeAreaView>
+    </HeaderView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#e8f5e9",
-  },
   container: {
     flex: 1,
     padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-    alignSelf: "center",
   },
   itemCard: {
     backgroundColor: "#fff",

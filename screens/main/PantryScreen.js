@@ -15,9 +15,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from "@react-native-picker/picker";
-import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
-import { getUserHousehold, subscribeToPantry, addPantryItem, updatePantryItem, deletePantryItem } from '../config/firebase';
+import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
+import { getUserHousehold, subscribeToPantry, addPantryItem, updatePantryItem, deletePantryItem } from '../../config/firebase';
 
 
 export default function PantryPage({ navigation }) {
@@ -75,8 +75,8 @@ export default function PantryPage({ navigation }) {
     }
 
     const result = await getUserHousehold(currentUser.id);
-    if (result.success && result.household) {
-      setHouseholdId(result.household.id);
+    if (result.success && result.householdId) {
+      setHouseholdId(result.householdId);
     } else {
       setLoading(false);
     }
@@ -346,7 +346,7 @@ export default function PantryPage({ navigation }) {
         quantity: newQuantity.trim(),
         unit: newUnit,
         category: matchedCategory,
-      });
+      }, currentUser.id);
       
       if (!result.success) {
         Alert.alert('Fel', result.error || 'Kunde inte uppdatera vara');
@@ -359,7 +359,7 @@ export default function PantryPage({ navigation }) {
         quantity: newQuantity.trim(),
         unit: newUnit,
         category: matchedCategory,
-      });
+      }, currentUser.id);
       
       if (!result.success) {
         Alert.alert('Fel', result.error || 'Kunde inte lägga till vara');

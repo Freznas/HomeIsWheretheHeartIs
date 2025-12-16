@@ -12,7 +12,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { createHousehold, joinHousehold } from '../config/firebase';
+import { createHousehold, joinHousehold } from '../../config/firebase';
 
 export default function HouseholdSetupScreen({ navigation, route }) {
   const { userId, email } = route.params || {};
@@ -36,7 +36,9 @@ export default function HouseholdSetupScreen({ navigation, route }) {
 
     setLoading(true);
     try {
-      const result = await createHousehold(householdName.trim(), userId, email);
+      // Använd email som displayName (tills vi har en profilsida)
+      const displayName = email.split('@')[0];
+      const result = await createHousehold(householdName.trim(), userId, email, displayName);
 
       if (!result.success) {
         Alert.alert('Fel', result.error || 'Kunde inte skapa hushåll. Försök igen.');
@@ -74,7 +76,9 @@ export default function HouseholdSetupScreen({ navigation, route }) {
 
     setLoading(true);
     try {
-      const result = await joinHousehold(inviteCode.trim(), userId, email);
+      // Använd email som displayName (tills vi har en profilsida)
+      const displayName = email.split('@')[0];
+      const result = await joinHousehold(inviteCode.trim(), userId, email, displayName);
 
       if (!result.success) {
         Alert.alert('Fel', result.error || 'Kunde inte gå med i hushållet. Försök igen.');

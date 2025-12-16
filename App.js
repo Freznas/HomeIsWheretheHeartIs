@@ -16,16 +16,16 @@ import { PanGestureHandler, TapGestureHandler, State } from "react-native-gestur
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from './context/ThemeContext';
 import { useAuth } from './context/AuthContext';
-import HeaderView from "./components/HeaderView";
-import HighlightSection from "./Sections/HighlightSection";
-import CalendarSection from "./Sections/CalendarSection";
-import PantrySection from "./Sections/PantrySection";
-import ShoppingListSection from "./Sections/ShoppingListSection";
-import ChoresSection from "./Sections/ChoresSection";
-import BillsSection from "./Sections/BillsSection";
-import NotesSection from "./Sections/NotesSection";
-import WeatherSection from "./Sections/WeatherSection";
-import VisitorsSection from "./Sections/VisitorsSection";
+import HeaderView from "./components/common/HeaderView";
+import HighlightSection from "./components/sections/HighlightSection";
+import CalendarSection from "./components/sections/CalendarSection";
+import PantrySection from "./components/sections/PantrySection";
+import ShoppingListSection from "./components/sections/ShoppingListSection";
+import ChoresSection from "./components/sections/ChoresSection";
+import BillsSection from "./components/sections/BillsSection";
+import NotesSection from "./components/sections/NotesSection";
+import WeatherSection from "./components/sections/WeatherSection";
+import VisitorsSection from "./components/sections/VisitorsSection";
 
 // 📏 STEG 1: Hämta skärmens dimensioner för FAB positionering
 // Dimensions.get("window") = aktuella skärmstorlek (uppdateras vid rotation)  
@@ -87,7 +87,7 @@ export default function App({ navigation }) {
       );
     } else {
       // Navigera till profilsidan om inloggad
-      navigation.navigate('ProfilePage');
+      navigation.navigate('Profile');
     }
   };
 
@@ -209,6 +209,12 @@ export default function App({ navigation }) {
               onPress={handleThemeToggle}
             >
               <Text style={styles.themeIcon}>{isDarkMode ? '☀️' : '🌙'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.supportButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]} 
+              onPress={() => navigation?.navigate('Support')}
+            >
+              <Text style={styles.supportIcon}>❓</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.profileButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]} 
@@ -385,6 +391,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   themeIcon: {
+    fontSize: 16,
+  },
+  supportButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  supportIcon: {
     fontSize: 16,
   },
   profileButton: {

@@ -20,19 +20,24 @@ import { NotificationsProvider } from './context/NotificationsContext';
 // STEG 2: Importera alla sidor som ska vara navigerbara
 // Varje import representerar en skärm som användaren kan navigera till
 import App from './App';                    // Hemskärmen - första sidan användaren ser
-import PantryPage from './Pages/PantryPage';           // Skafferisidan - hanterar mat i skafferiet
-import CommunicationPage from './Pages/CommunicationPage';  // Chat/kommunikationssidan
-import ShoppingListPage from './Pages/ShoppingListPage';    // Inköpslistsidan
-import ChoresPage from './Pages/ChoresPage';               // Sysslor/uppgifter sidan
-import BillsPage from './Pages/BillsPage';                 // Räkningar sidan
-import NotesPage from './Pages/NotesPage';                 // Anteckningar sidan
-import VisitorsPage from './Pages/VisitorsPage';           // Besökare sidan
-import CalendarPage from './Pages/CalendarPage';           // Kalender sidan
-import WeatherPage from './Pages/WeatherPage';             // Väder sidan
-import ProfilePage from './Pages/ProfilePage';             // Profilsidan
-import LoginScreen from './Pages/LoginScreen';             // Inloggningssidan
-import RegisterScreen from './Pages/RegisterScreen';       // Registreringssidan
-import HouseholdSetupScreen from './Pages/HouseholdSetupScreen'; // Hushållsinställning
+
+// Auth screens
+import LoginScreen from './screens/auth/LoginScreen';             // Inloggningssidan
+import RegisterScreen from './screens/auth/RegisterScreen';       // Registreringssidan
+import HouseholdSetupScreen from './screens/auth/HouseholdSetupScreen'; // Hushållsinställning
+
+// Main screens
+import PantryScreen from './screens/main/PantryScreen';           // Skafferisidan - hanterar mat i skafferiet
+import CommunicationScreen from './screens/main/CommunicationScreen';  // Chat/kommunikationssidan
+import ShoppingListScreen from './screens/main/ShoppingListScreen';    // Inköpslistsidan
+import ChoresScreen from './screens/main/ChoresScreen';               // Sysslor/uppgifter sidan
+import BillsScreen from './screens/main/BillsScreen';                 // Räkningar sidan
+import NotesScreen from './screens/main/NotesScreen';                 // Anteckningar sidan
+import VisitorsScreen from './screens/main/VisitorsScreen';           // Besökare sidan
+import CalendarScreen from './screens/main/CalendarScreen';           // Kalender sidan
+import WeatherScreen from './screens/main/WeatherScreen';             // Väder sidan
+import ProfileScreen from './screens/main/ProfileScreen';             // Profilsidan
+import SupportScreen from './screens/main/SupportScreen';             // Support och info-sidan
 
 // STEG 3: Skapa Stack Navigator
 // Stack = "hög av papper" - nya sidor läggs på toppen, kan "pop" tillbaka till föregående
@@ -58,16 +63,17 @@ function NavigationContent() {
         // Inloggade användare ser huvudappen
         <>
         <Stack.Screen name="Home" component={App} />
-        <Stack.Screen name="PantryPage" component={PantryPage} />
-        <Stack.Screen name="ShoppingListPage" component={ShoppingListPage} />
-        <Stack.Screen name="ChoresPage" component={ChoresPage} />
-        <Stack.Screen name="BillsPage" component={BillsPage} />
-        <Stack.Screen name="NotesPage" component={NotesPage} />
-        <Stack.Screen name="VisitorsPage" component={VisitorsPage} />
-        <Stack.Screen name="CommunicationPage" component={CommunicationPage} />
-        <Stack.Screen name="CalendarPage" component={CalendarPage} />
-        <Stack.Screen name="WeatherPage" component={WeatherPage} />
-        <Stack.Screen name="ProfilePage" component={ProfilePage} />
+        <Stack.Screen name="PantryPage" component={PantryScreen} />
+        <Stack.Screen name="ShoppingListPage" component={ShoppingListScreen} />
+        <Stack.Screen name="ChoresPage" component={ChoresScreen} />
+        <Stack.Screen name="BillsPage" component={BillsScreen} />
+        <Stack.Screen name="NotesPage" component={NotesScreen} />
+        <Stack.Screen name="VisitorsPage" component={VisitorsScreen} />
+        <Stack.Screen name="CommunicationPage" component={CommunicationScreen} />
+        <Stack.Screen name="CalendarPage" component={CalendarScreen} />
+        <Stack.Screen name="WeatherPage" component={WeatherScreen} />
+        <Stack.Screen name="Profile" component={ProfileScreen} />
+        <Stack.Screen name="Support" component={SupportScreen} />
         <Stack.Screen name="HouseholdSetupScreen" component={HouseholdSetupScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Register" component={RegisterScreen} />

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
-import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
-import { getUserHousehold, subscribeToPantry } from '../config/firebase';
+import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
+import { getUserHousehold, subscribeToShoppingList } from '../../config/firebase';
 
-export default function PantrySection({ navigation }) {
+export default function ShoppingListSection({ navigation }) {
   const { theme } = useTheme();
   const { currentUser } = useAuth();
-  const [pantryItems, setPantryItems] = useState([]);
+  const [items, setItems] = useState([]);
   const [lastItem, setLastItem] = useState(null);
   const [itemCount, setItemCount] = useState(0);
   const [householdId, setHouseholdId] = useState(null);
@@ -19,9 +19,9 @@ export default function PantrySection({ navigation }) {
   useEffect(() => {
     if (!householdId) return;
 
-    const unsubscribe = subscribeToPantry(householdId, (result) => {
+    const unsubscribe = subscribeToShoppingList(householdId, (result) => {
       if (result.success) {
-        setPantryItems(result.items || []);
+        setItems(result.items || []);
       }
     });
 
@@ -38,43 +38,44 @@ export default function PantrySection({ navigation }) {
   };
 
   useEffect(() => {
-    if (pantryItems && pantryItems.length > 0) {
-      // Räkna totalt antal varor
-      setItemCount(pantryItems.length);
+    if (items && items.length > 0) {
+      // Räkna endast varor som INTE är completed
+      const activeItems = items.filter(item => !item.completed);
+      setItemCount(activeItems.length);
       
-      // Hitta senast tillagd vara (högst id-nummer)
-      const sorted = [...pantryItems].sort((a, b) => {
+      // Hitta senast tillagd vara som INTE är completed (högst id-nummer)
+      const sorted = [...activeItems].sort((a, b) => {
         const idA = parseInt(a.id) || 0;
         const idB = parseInt(b.id) || 0;
         return idB - idA;
       });
-      setLastItem(sorted[0]);
+      setLastItem(sorted.length > 0 ? sorted[0] : null);
     } else {
       setItemCount(0);
       setLastItem(null);
     }
-  }, [pantryItems]);
+  }, [items]);
 
   return (
-    <TouchableOpacity 
-      style={[styles.card, { backgroundColor: theme.cardBackground, shadowColor: theme.shadowColor }]} 
-      activeOpacity={0.8}
-      onPress={() => navigation.navigate("PantryPage")}
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={() => navigation && navigation.navigate("ShoppingListPage")}
+      style={[styles.card, { backgroundColor: theme.cardBackground, shadowColor: theme.shadow }]}
     >
       <View style={styles.header}>
-        <Text style={styles.icon}>🥫</Text>
-        <Text style={[styles.title, { color: theme.text }]}>Skafferi</Text>
+        <Text style={styles.icon}>🛒</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Inköpslista</Text>
       </View>
       <View style={styles.content}>
-        <Text style={[styles.itemCount, { color: theme.primary }]}>
+        <Text style={[styles.itemCount, { color: theme.accent }]}>
           {itemCount} {itemCount === 1 ? 'vara' : 'varor'}
         </Text>
-        <Text style={[styles.recentItem, { color: theme.textSecondary }]}>
-          {lastItem ? `Senast: ${lastItem.name}` : 'Inget i skafferiet'}
+        <Text style={[styles.nextItem, { color: theme.textSecondary }]}>
+          {lastItem ? `Nästa: ${lastItem.name}` : 'Listan är tom'}
         </Text>
       </View>
-      <View style={[styles.statusBadge, { backgroundColor: theme.primary + '20' }]}>
-        <Text style={[styles.statusText, { color: theme.primary }]}>Uppdaterad</Text>
+      <View style={[styles.statusBadge, { backgroundColor: theme.accent + '20' }]}>
+        <Text style={[styles.statusText, { color: theme.accent }]}>Aktiv</Text>
       </View>
     </TouchableOpacity>
   );
@@ -113,17 +114,17 @@ const styles = StyleSheet.create({
   itemCount: {
     fontSize: 20,
     fontWeight: "bold",
-    color: "#4caf50",
+    color: "#2196f3",
     marginBottom: 4,
   },
-  recentItem: {
+  nextItem: {
     fontSize: 12,
     color: "#666",
     marginBottom: 12,
   },
   statusBadge: {
     alignSelf: "flex-start",
-    backgroundColor: "#e8f5e9",
+    backgroundColor: "#e3f2fd",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -131,7 +132,7 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#4caf50",
+    color: "#2196f3",
   },
 });
 

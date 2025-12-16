@@ -11,8 +11,8 @@ import {
   StatusBar,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useCommunicationData } from '../hooks/useAsyncStorage';
-import { useTheme } from '../context/ThemeContext';
+import { useCommunicationData } from '../../hooks/useAsyncStorage';
+import { useTheme } from '../../context/ThemeContext';
 
 export default function CommunicationPage({ navigation }) {
   const { theme } = useTheme();

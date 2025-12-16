@@ -18,10 +18,10 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
-import { useNotifications } from '../context/NotificationsContext';
-import { getUserHousehold, subscribeToHousehold, leaveHousehold as leaveHouseholdFirebase, removeMember as removeMemberFirebase } from '../config/firebase';
+import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
+import { useNotifications } from '../../context/NotificationsContext';
+import { getUserHousehold, subscribeToHousehold, leaveHousehold as leaveHouseholdFirebase, removeMember as removeMemberFirebase } from '../../config/firebase';
 
 // Hushållssektion komponent
 function HouseholdSection({ theme, navigation, currentUser, showToast }) {
@@ -393,7 +393,7 @@ export default function ProfilePage({ navigation }) {
     
     try {
       // TODO: Byt till din server-URL när du deployar
-      const API_URL = __DEV__ ? 'http://192.168.1.246:3000' : 'https://your-api.com';
+      const API_URL = __DEV__ ? 'http://172.20.10.4:3000' : 'https://your-api.com';
       
       const response = await fetch(`${API_URL}/api/auth/send-2fa-code`, {
         method: 'POST',

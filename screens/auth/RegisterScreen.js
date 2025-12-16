@@ -12,8 +12,8 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 
 const AVATARS = ['👤', '👨', '👩', '🧑', '👦', '👧', '👨‍💼', '👩‍💼', '👨‍🍳', '👩‍🍳', '👨‍🌾', '👩‍🌾'];
 const ROLES = [
@@ -74,7 +74,7 @@ export default function RegisterScreen({ navigation }) {
     setCodeExpiry(expiry);
     
     try {
-      const API_URL = __DEV__ ? 'http://192.168.1.246:3000' : 'https://your-api.com';
+      const API_URL = __DEV__ ? 'http://172.20.10.4:3000' : 'https://your-api.com';
       
       const response = await fetch(`${API_URL}/api/auth/send-2fa-code`, {
         method: 'POST',

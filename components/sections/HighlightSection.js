@@ -1,18 +1,20 @@
 import React, { useRef, useEffect, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from "react-native";
-import { useCalendarData } from '../hooks/useAsyncStorage';
-import { useTheme } from '../context/ThemeContext';
-import { useNotifications } from '../context/NotificationsContext';
+import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
+import { useNotifications } from '../../context/NotificationsContext';
+import { getUserHousehold, subscribeToCalendar } from '../../config/firebase';
 
 export default function HighlightSection({ navigation }) {
   const { theme } = useTheme();
+  const { currentUser } = useAuth();
   const { scheduleEventReminder } = useNotifications();
-  // Hämta kalenderhändelser från AsyncStorage
-  const [events, setEvents, removeCalendarData, loading] = useCalendarData();
+  
   const scrollViewRef = useRef(null);
   const currentIndexRef = useRef(0);
   const [localEvents, setLocalEvents] = useState([]);
   const [scheduledEventKeys, setScheduledEventKeys] = useState(new Set());
+  const [loading, setLoading] = useState(true);
 
   // Ladda scheduledEventKeys från AsyncStorage när komponenten mountas
   useEffect(() => {
@@ -42,54 +44,55 @@ export default function HighlightSection({ navigation }) {
     }
   };
 
-  // Synka events till local state och schemalägg notifikationer
+  // 🔥 Firebase - Hämta kalenderhändelser
   useEffect(() => {
-    setLocalEvents(events || []);
-    
-    // Schemalägg notifikationer för kommande events inom 24 timmar
-    if (events && events.length > 0) {
-      const now = new Date();
-      const twentyFourHoursFromNow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      
-      events.forEach(event => {
-        const eventDate = new Date(event.date);
-        const eventKey = `${event.id || event.title}-${event.date}`; // Unik nyckel för eventet
+    let unsubscribe;
+
+    const loadData = async () => {
+      if (!currentUser?.id) return;
+
+      try {
+        const result = await getUserHousehold(currentUser.id);
         
-        // Schemalägg bara för events inom 24 timmar framåt och som inte redan schemalagts
-        if (eventDate > now && eventDate <= twentyFourHoursFromNow && !scheduledEventKeys.has(eventKey)) {
-          scheduleEventReminder(event).then(notificationId => {
-            if (notificationId) {
-              saveScheduledEventKey(eventKey); // Spara att vi schemalagt denna
-              console.log(`Notifikation schemalagd för event: ${event.title}`);
+        if (result.success && result.householdId) {
+          unsubscribe = subscribeToCalendar(result.householdId, (response) => {
+            if (response.success) {
+              // Filtrera endast användarskapade händelser
+              const userEvents = (response.events || []).filter(e => e.isFromPhone !== true);
+              setLocalEvents(userEvents);
+              setLoading(false);
+              
+              // Schemalägg notifikationer för kommande events inom 24 timmar
+              const now = new Date();
+              const twentyFourHoursFromNow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+              
+              userEvents.forEach(event => {
+                const eventDate = new Date(event.date);
+                const eventKey = `${event.id || event.title}-${event.date}`;
+                
+                if (eventDate > now && eventDate <= twentyFourHoursFromNow && !scheduledEventKeys.has(eventKey)) {
+                  scheduleEventReminder(event).then(notificationId => {
+                    if (notificationId) {
+                      saveScheduledEventKey(eventKey);
+                      console.log(`Notifikation schemalagd för event: ${event.title}`);
+                    }
+                  });
+                }
+              });
             }
           });
         }
-      });
-    }
-  }, [events, scheduledEventKeys]);
-
-  // Lyssna på navigation state changes och ladda om data när användaren kommer tillbaka
-  useEffect(() => {
-    const reloadData = async () => {
-      try {
-        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-        const item = await AsyncStorage.getItem('calendar');
-        if (item !== null) {
-          const parsedEvents = JSON.parse(item);
-          setLocalEvents(parsedEvents);
-          setEvents(parsedEvents); // Uppdatera även hooken
-        }
       } catch (error) {
-        console.error('Error reloading calendar data:', error);
+        console.error('Error loading calendar events:', error);
       }
     };
 
-    const unsubscribe = navigation?.addListener('focus', () => {
-      reloadData();
-    });
+    loadData();
 
-    return unsubscribe;
-  }, [navigation]);
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [currentUser, scheduledEventKeys]);
 
   // Hämta kommande händelser (nästa 7 dagar)
   const getUpcomingEvents = () => {
@@ -101,6 +104,9 @@ export default function HighlightSection({ navigation }) {
     
     return localEvents
       .filter(event => {
+        // Filtrera bort telefon-synkade händelser (Lucia, Nobeldagen, etc.)
+        if (event.isFromPhone === true) return false;
+        
         const eventDate = new Date(event.date + 'T00:00:00');
         return eventDate >= today && eventDate <= nextWeek;
       })

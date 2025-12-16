@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,42 +9,137 @@ import {
   Platform,
   Modal,
   TextInput,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useChoresData } from '../hooks/useAsyncStorage';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
+import { getUserHousehold, subscribeToChores, addChore, updateChore, deleteChore } from '../../config/firebase';
 
 export default function ChoresPage({ navigation }) {
   const { theme } = useTheme();
-  // 💾 AsyncStorage hook - hanterar all data automatiskt
-  const [chores, setChores, removeChoresData, loading] = useChoresData();
+  const { currentUser } = useAuth();
+  
+  // 🔥 Firebase state - realtidsuppdatering
+  const [chores, setChores] = useState([]);
+  const [householdId, setHouseholdId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  
   const [modalVisible, setModalVisible] = useState(false);
   const [newTask, setNewTask] = useState("");
   const [newAssignee, setNewAssignee] = useState("");
 
-  const toggleComplete = (id) => {
-    setChores(currentChores =>
-      currentChores.map(chore => 
-        chore.id === id ? { ...chore, completed: !chore.completed } : chore
-      )
-    );
+  // 🔥 Firebase - Hämta hushålls-ID och prenumerera på sysslor
+  useEffect(() => {
+    let unsubscribe;
+
+    const loadData = async () => {
+      if (!currentUser?.id) {
+        console.log('ChoresScreen: Ingen användare inloggad');
+        setLoading(false);
+        return;
+      }
+
+      try {
+        console.log('ChoresScreen: Hämtar household för userId:', currentUser.id);
+        // Hämta användarens hushålls-ID
+        const result = await getUserHousehold(currentUser.id);
+        console.log('ChoresScreen: getUserHousehold result:', result);
+        
+        if (result.success && result.householdId) {
+          console.log('ChoresScreen: Household hittad:', result.householdId);
+          setHouseholdId(result.householdId);
+          
+          // Prenumerera på realtidsuppdateringar
+          unsubscribe = subscribeToChores(result.householdId, (response) => {
+            if (response.success) {
+              console.log('ChoresScreen: Sysslor uppdaterade:', response.chores?.length || 0);
+              setChores(response.chores || []);
+            } else {
+              console.error('Error subscribing to chores:', response.error);
+            }
+            setLoading(false);
+          });
+        } else {
+          console.log('ChoresScreen: Ingen household hittades. Result:', result);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('ChoresScreen: Error loading household:', error);
+        setLoading(false);
+      }
+    };
+
+    loadData();
+
+    // Cleanup - avsluta prenumeration när komponenten unmountas
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [currentUser]);
+
+  const toggleComplete = async (id) => {
+    if (!householdId) return;
+    
+    const chore = chores.find(c => c.id === id);
+    if (!chore) return;
+
+    try {
+      const result = await updateChore(
+        householdId,
+        id,
+        { completed: !chore.completed },
+        currentUser.id
+      );
+
+      if (!result.success) {
+        Alert.alert('Fel', 'Kunde inte uppdatera sysslan');
+      }
+    } catch (error) {
+      console.error('Error toggling chore:', error);
+      Alert.alert('Fel', 'Ett fel uppstod vid uppdatering');
+    }
   };
 
-  const addChore = () => {
-    if (newTask.trim() && newAssignee.trim()) {
-      setChores(currentChores => [
-        ...currentChores,
-        {
-          id: Date.now().toString(),
-          task: newTask.trim(),
-          assignedTo: newAssignee.trim(),
-          completed: false,
-          dueDate: "Idag"
-        }
-      ]);
-      setNewTask("");
-      setNewAssignee("");
-      setModalVisible(false);
+  const handleAddChore = async () => {
+    if (!newTask.trim() || !newAssignee.trim()) {
+      Alert.alert('Fyll i alla fält', 'Uppgift och tilldelad person måste anges');
+      return;
+    }
+
+    console.log('ChoresScreen: handleAddChore - householdId:', householdId);
+    console.log('ChoresScreen: handleAddChore - currentUser:', currentUser?.id);
+    
+    if (!householdId) {
+      Alert.alert('Fel', 'Inget hushåll hittat. HouseholdId: ' + householdId);
+      return;
+    }
+
+    try {
+      const choreData = {
+        task: newTask.trim(),
+        assignedTo: currentUser.id, // Använd userId istället för namn
+        completed: false,
+        dueDate: "Idag",
+      };
+
+      const result = await addChore(
+        householdId,
+        choreData,
+        currentUser.id,
+        newAssignee.trim() // Skicka displayName separat
+      );
+
+      if (result.success) {
+        setNewTask("");
+        setNewAssignee("");
+        setModalVisible(false);
+      } else {
+        Alert.alert('Fel', 'Kunde inte lägga till sysslan');
+      }
+    } catch (error) {
+      console.error('Error adding chore:', error);
+      Alert.alert('Fel', 'Ett fel uppstod');
     }
   };
 
@@ -61,7 +156,9 @@ export default function ChoresPage({ navigation }) {
           <Text style={[styles.taskName, { color: theme.text }, item.completed && styles.completedText]}>
             {item.task}
           </Text>
-          <Text style={[styles.assignedTo, { color: theme.textSecondary }]}>Tilldelad: {item.assignedTo}</Text>
+          <Text style={[styles.assignedTo, { color: theme.textSecondary }]}>
+            Tilldelad: {item.assignedToName || 'Okänd'}
+          </Text>
         </View>
         <View style={[styles.dueDateBadge, { backgroundColor: theme.accent }]}>
           <Text style={[styles.dueDateText, { color: theme.textInverse }]}>{item.dueDate}</Text>
@@ -173,7 +270,7 @@ export default function ChoresPage({ navigation }) {
             </View>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.success }]} onPress={addChore}>
+              <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.success }]} onPress={handleAddChore}>
                 <Text style={[styles.saveButtonText, { color: theme.textInverse }]}>Lägg till</Text>
               </TouchableOpacity>
               <TouchableOpacity 

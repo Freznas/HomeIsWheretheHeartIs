@@ -1,21 +1,70 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from "react-native";
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState, useEffect } from "react";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert } from "react-native";
 import { Picker } from "@react-native-picker/picker";
-import { useBillsData } from '../hooks/useAsyncStorage';
-import { useTheme } from '../context/ThemeContext';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
+import { getUserHousehold, subscribeToBills, addBill, updateBill, deleteBill } from '../../config/firebase';
+import HeaderView from '../../components/common/HeaderView';
 
 export default function BillsPage({ navigation }) {
-  // 💾 AsyncStorage hook - hanterar all data automatiskt
-  const [bills, setBills, removeBillsData, loading] = useBillsData();
   const { theme } = useTheme();
+  const { currentUser } = useAuth();
+  
+  // 🔥 Firebase state - realtidsuppdatering
+  const [bills, setBills] = useState([]);
+  const [householdId, setHouseholdId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  
   const [modalVisible, setModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [newName, setNewName] = useState("");
   const [newAmount, setNewAmount] = useState("");
-  const [newDueDate, setNewDueDate] = useState("");
+  const [newDueDate, setNewDueDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [newStatus, setNewStatus] = useState("Ej betald");
   const [errors, setErrors] = useState({});
+
+  // 🔥 Firebase - Hämta hushålls-ID och prenumerera på räkningar
+  useEffect(() => {
+    let unsubscribe;
+
+    const loadData = async () => {
+      if (!currentUser?.id) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const result = await getUserHousehold(currentUser.id);
+        
+        if (result.success && result.householdId) {
+          setHouseholdId(result.householdId);
+          
+          // Prenumerera på realtidsuppdateringar
+          unsubscribe = subscribeToBills(result.householdId, (response) => {
+            if (response.success) {
+              setBills(response.bills || []);
+            } else {
+              console.error('Error subscribing to bills:', response.error);
+            }
+            setLoading(false);
+          });
+        } else {
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Error loading household:', error);
+        setLoading(false);
+      }
+    };
+
+    loadData();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [currentUser]);
 
   const renderItem = ({ item }) => (
     <TouchableOpacity 
@@ -34,7 +83,8 @@ export default function BillsPage({ navigation }) {
     setEditingItem(item);
     setNewName(item.name);
     setNewAmount(item.amount);
-    setNewDueDate(item.dueDate);
+    // Konvertera datum string till Date objekt
+    setNewDueDate(item.dueDate ? new Date(item.dueDate) : new Date());
     setNewStatus(item.status);
     setModalVisible(true);
   };
@@ -43,70 +93,116 @@ export default function BillsPage({ navigation }) {
     setEditingItem(null);
     setNewName("");
     setNewAmount("");
-    setNewDueDate("");
+    setNewDueDate(new Date());
     setNewStatus("Ej betald");
     setModalVisible(true);
   };
 
-  const handleSave = () => {
+  const formatDate = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const onDateChange = (event, selectedDate) => {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
+    
+    if (selectedDate) {
+      setNewDueDate(selectedDate);
+      if (errors.dueDate) setErrors({ ...errors, dueDate: undefined });
+    }
+  };
+
+  const handleSave = async () => {
     let newErrors = {};
     if (!newName.trim()) newErrors.name = "Fyll i räkningsnamn";
     if (!newAmount.trim()) newErrors.amount = "Fyll i belopp";
-    if (!newDueDate.trim()) newErrors.dueDate = "Fyll i förfallodatum";
 
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length > 0) return;
 
-    if (editingItem) {
-      // 🔄 Uppdatera befintlig räkning (sparas automatiskt till AsyncStorage)
-      setBills(currentBills => 
-        currentBills.map(item => 
-          item.id === editingItem.id 
-            ? {
-                ...item,
-                name: newName.trim(),
-                amount: newAmount.trim(),
-                dueDate: newDueDate.trim(),
-                status: newStatus,
-              }
-            : item
-        )
-      );
-    } else {
-      // ➕ Lägg till ny räkning (sparas automatiskt till AsyncStorage)
-      setBills(currentBills => [
-        ...currentBills,
-        {
-          id: Date.now().toString(),
-          name: newName.trim(),
-          amount: newAmount.trim(),
-          dueDate: newDueDate.trim(),
-          status: newStatus,
-        },
-      ]);
+    if (!householdId) {
+      Alert.alert('Fel', 'Inget hushåll hittat');
+      return;
     }
 
-    setNewName("");
-    setNewAmount("");
-    setNewDueDate("");
-    setNewStatus("Ej betald");
-    setEditingItem(null);
-    setErrors({});
-    setModalVisible(false);
-  };
+    try {
+      const formattedDate = formatDate(newDueDate);
+      
+      if (editingItem) {
+        // 🔄 Uppdatera befintlig räkning i Firebase
+        const result = await updateBill(
+          householdId,
+          editingItem.id,
+          {
+            name: newName.trim(),
+            amount: newAmount.trim(),
+            dueDate: formattedDate,
+            status: newStatus,
+          },
+          currentUser.id
+        );
 
-  const handleDelete = () => {
-    if (editingItem) {
-      // 🗑️ Ta bort räkning (sparas automatiskt till AsyncStorage)
-      setBills(currentBills => currentBills.filter(item => item.id !== editingItem.id));
-      setModalVisible(false);
-      setEditingItem(null);
+        if (!result.success) {
+          Alert.alert('Fel', 'Kunde inte uppdatera räkningen');
+          return;
+        }
+      } else {
+        // ➕ Lägg till ny räkning i Firebase
+        const result = await addBill(
+          householdId,
+          {
+            name: newName.trim(),
+            amount: newAmount.trim(),
+            dueDate: formattedDate,
+            status: newStatus,
+          },
+          currentUser.id
+        );
+
+        if (!result.success) {
+          Alert.alert('Fel', 'Kunde inte lägga till räkningen');
+          return;
+        }
+      }
+
       setNewName("");
       setNewAmount("");
-      setNewDueDate("");
+      setNewDueDate(new Date());
       setNewStatus("Ej betald");
+      setEditingItem(null);
       setErrors({});
+      setModalVisible(false);
+    } catch (error) {
+      console.error('Error saving bill:', error);
+      Alert.alert('Fel', 'Ett fel uppstod');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!editingItem || !householdId) return;
+
+    try {
+      const result = await deleteBill(householdId, editingItem.id);
+
+      if (result.success) {
+        setModalVisible(false);
+        setEditingItem(null);
+        setNewName("");
+        setNewAmount("");
+        setNewDueDate(new Date());
+        setNewStatus("Ej betald");
+        setErrors({});
+      } else {
+        Alert.alert('Fel', 'Kunde inte ta bort räkningen');
+      }
+    } catch (error) {
+      console.error('Error deleting bill:', error);
+      Alert.alert('Fel', 'Ett fel uppstod');
     }
   };
 
@@ -120,9 +216,13 @@ export default function BillsPage({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+    <HeaderView
+      title="Räkningar"
+      onBackPress={() => navigation.goBack()}
+      onProfilePress={() => navigation.navigate('Profile')}
+      onSupportPress={() => navigation.navigate('Support')}
+    >
       <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <Text style={[styles.title, { color: theme.text }]}>Hushållets Räkningar</Text>
         <FlatList
           data={bills}
           keyExtractor={item => item.id}
@@ -173,17 +273,37 @@ export default function BillsPage({ navigation }) {
               />
               {errors.amount ? <Text style={styles.errorText}>{errors.amount}</Text> : null}
               
-              <TextInput
-                style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text, borderColor: theme.border }]}
-                placeholder="Förfallodatum (ÅÅÅÅ-MM-DD)"
-                placeholderTextColor={theme.textSecondary}
-                value={newDueDate}
-                onChangeText={text => {
-                  setNewDueDate(text);
-                  if (errors.dueDate) setErrors({ ...errors, dueDate: undefined });
-                }}
-              />
-              {errors.dueDate ? <Text style={[styles.errorText, { color: theme.error }]}>{errors.dueDate}</Text> : null}
+              <View style={styles.datePickerWrapper}>
+                <Text style={[styles.pickerLabel, { color: theme.text }]}>Förfallodatum:</Text>
+                <TouchableOpacity 
+                  style={[styles.datePickerButton, { backgroundColor: theme.inputBackground, borderColor: theme.border }]}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Text style={[styles.datePickerText, { color: theme.text }]}>
+                    {formatDate(newDueDate)}
+                  </Text>
+                  <Text style={[styles.pickerArrow, { color: theme.text }]}>📅</Text>
+                </TouchableOpacity>
+              </View>
+              
+              {showDatePicker && (
+                <DateTimePicker
+                  value={newDueDate}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={onDateChange}
+                  minimumDate={new Date()}
+                />
+              )}
+              
+              {Platform.OS === 'ios' && showDatePicker && (
+                <TouchableOpacity 
+                  style={[styles.datePickerDoneButton, { backgroundColor: theme.success }]}
+                  onPress={() => setShowDatePicker(false)}
+                >
+                  <Text style={[styles.datePickerDoneText, { color: theme.textInverse }]}>Klar</Text>
+                </TouchableOpacity>
+              )}
               
               <View style={styles.pickerWrapper}>
                 <Text style={[styles.pickerLabel, { color: theme.text }]}>Status:</Text>
@@ -221,24 +341,14 @@ export default function BillsPage({ navigation }) {
           </KeyboardAvoidingView>
         </Modal>
       </View>
-    </SafeAreaView>
+    </HeaderView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#fce4ec",
-  },
   container: {
     flex: 1,
     padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-    alignSelf: "center",
   },
   itemCard: {
     backgroundColor: "#fff",
@@ -354,6 +464,37 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginBottom: 6,
     marginLeft: 2,
+  },
+  datePickerWrapper: {
+    marginBottom: 12,
+  },
+  datePickerButton: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: "#bbb",
+    borderRadius: 8,
+    backgroundColor: "#f5f5f5",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+  },
+  datePickerText: {
+    fontSize: 16,
+    color: "#333",
+  },
+  datePickerDoneButton: {
+    backgroundColor: "#4caf50",
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  datePickerDoneText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
   },
 });
 

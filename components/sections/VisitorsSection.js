@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
-import { useTheme } from '../context/ThemeContext';
-import { useVisitorsData } from '../hooks/useAsyncStorage';
+import { useTheme } from '../../context/ThemeContext';
+import { useVisitorsData } from '../../hooks/useAsyncStorage';
 
 export default function VisitorsSection({ navigation }) {
   const { theme } = useTheme();

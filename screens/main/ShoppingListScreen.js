@@ -15,9 +15,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from "@react-native-picker/picker";
-import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
-import { getUserHousehold, subscribeToShoppingList, addShoppingListItem, updateShoppingListItem, deleteShoppingListItem } from '../config/firebase';
+import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
+import { getUserHousehold, subscribeToShoppingList, addShoppingListItem, updateShoppingListItem, deleteShoppingListItem } from '../../config/firebase';
 
 export default function ShoppingListPage({ navigation }) {
   const { theme } = useTheme();
@@ -67,8 +67,8 @@ export default function ShoppingListPage({ navigation }) {
     }
 
     const result = await getUserHousehold(currentUser.id);
-    if (result.success && result.household) {
-      setHouseholdId(result.household.id);
+    if (result.success && result.householdId) {
+      setHouseholdId(result.householdId);
     } else {
       setLoading(false);
     }
@@ -83,7 +83,7 @@ export default function ShoppingListPage({ navigation }) {
     // 🔥 Uppdatera completed status i Firebase
     await updateShoppingListItem(householdId, id, {
       completed: !item.completed
-    });
+    }, currentUser.id);
   };
 
   const addItem = async () => {
@@ -103,7 +103,7 @@ export default function ShoppingListPage({ navigation }) {
       quantity: quantityString,
       completed: false,
       category: "Övrigt"
-    });
+    }, currentUser.id);
     
     if (!result.success) {
       Alert.alert('Fel', result.error || 'Kunde inte lägga till vara');
