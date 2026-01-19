@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { getUserHousehold, subscribeToPantry } from '../../config/firebase';
 
 export default function PantrySection({ navigation }) {
   const { theme } = useTheme();
   const { currentUser } = useAuth();
+  const { t } = useLanguage();
   const [pantryItems, setPantryItems] = useState([]);
   const [lastItem, setLastItem] = useState(null);
   const [itemCount, setItemCount] = useState(0);
@@ -63,7 +65,7 @@ export default function PantrySection({ navigation }) {
     >
       <View style={styles.header}>
         <Text style={styles.icon}>🥫</Text>
-        <Text style={[styles.title, { color: theme.text }]}>Skafferi</Text>
+        <Text style={[styles.title, { color: theme.text }]}>{t('home.pantry')}</Text>
       </View>
       <View style={styles.content}>
         <Text style={[styles.itemCount, { color: theme.primary }]}>

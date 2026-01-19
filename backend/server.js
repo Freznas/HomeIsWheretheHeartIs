@@ -217,11 +217,11 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-const server = app.listen(PORT, '172.20.10.4', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 2FA Backend server körs på port ${PORT}`);
   console.log(`📧 SendGrid konfigurerad: ${process.env.SENDGRID_API_KEY ? 'Ja' : 'Nej'}`);
-  console.log(`🌐 Tillgänglig på: http://172.20.10.4:${PORT}`);
-  console.log(`🔥 Lyssnar på IP: 172.20.10.4`);
+  console.log(`🌐 Tillgänglig på: http://localhost:${PORT}`);
+  console.log(`🌐 Eller på: http://0.0.0.0:${PORT}`);
 });
 
 server.on('error', (error) => {

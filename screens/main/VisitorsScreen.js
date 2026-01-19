@@ -18,6 +18,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
+import HeaderView from '../../components/common/HeaderView';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Contacts from 'expo-contacts';
 import * as Calendar from 'expo-calendar';
@@ -26,7 +28,9 @@ const STORAGE_KEY = '@visitors';
 
 export default function VisitorsPage({ navigation }) {
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const [visitors, setVisitors] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingVisitor, setEditingVisitor] = useState(null);
   const [contacts, setContacts] = useState([]);
@@ -54,6 +58,12 @@ export default function VisitorsPage({ navigation }) {
     loadAllContacts();
   }, []);
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadVisitors();
+    setRefreshing(false);
+  };
+
   const loadAllContacts = async () => {
     try {
       const { status } = await Contacts.requestPermissionsAsync();
@@ -75,6 +85,7 @@ export default function VisitorsPage({ navigation }) {
       }
     } catch (error) {
       console.error('Error loading contacts:', error);
+      Alert.alert(t('error.title'), t('error.loadContacts'));
     }
   };
 
@@ -86,6 +97,7 @@ export default function VisitorsPage({ navigation }) {
       }
     } catch (error) {
       console.error('Error loading visitors:', error);
+      Alert.alert(t('error.title'), t('error.loadVisitors'));
     }
   };
 
@@ -95,6 +107,7 @@ export default function VisitorsPage({ navigation }) {
       setVisitors(newVisitors);
     } catch (error) {
       console.error('Error saving visitors:', error);
+      Alert.alert(t('error.title'), t('error.saveVisitor'));
     }
   };
 
@@ -231,12 +244,13 @@ export default function VisitorsPage({ navigation }) {
       await AsyncStorage.setItem(CALENDAR_KEY, JSON.stringify([...events, newEvent]));
     } catch (error) {
       console.error('Error adding to calendar:', error);
+      Alert.alert(t('error.title'), t('error.addToCalendar'));
     }
   };
 
-  const handleSave = async () => {
+  const handleSaveVisitor = async () => {
     if (!formData.name.trim()) {
-      Alert.alert('Namn saknas', 'Ange namnet på besökaren');
+      Alert.alert(t('error.nameMissing'), t('error.enterVisitorName'));
       return;
     }
 
@@ -297,26 +311,11 @@ export default function VisitorsPage({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.headerBackground} />
-      
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.headerBackground }]}>
-        <View style={styles.headerContent}>
-          <TouchableOpacity 
-            style={styles.backButton} 
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={[styles.backIcon, { color: theme.headerText }]}>←</Text>
-          </TouchableOpacity>
-          <View style={styles.titleContainer}>
-            <Text style={[styles.headerTitle, { color: theme.headerText }]}>Besökare</Text>
-            <Text style={[styles.headerSubtitle, { color: theme.headerText, opacity: 0.8 }]}>
-              {visitors.length} {visitors.length === 1 ? 'besökare' : 'besökare'}
-            </Text>
-          </View>
-        </View>
-      </View>
+    <HeaderView
+      title={t('visitors.title')}
+      subtitle={`${visitors.length} ${visitors.length === 1 ? 'besökare' : 'besökare'}`}
+      navigation={navigation}
+    >
 
       {/* Content */}
       <View style={[styles.content, { backgroundColor: theme.background }]}>
@@ -329,7 +328,18 @@ export default function VisitorsPage({ navigation }) {
             </Text>
           </View>
         ) : (
-          <ScrollView style={styles.listContainer} contentContainerStyle={styles.listContent}>
+          <ScrollView 
+            style={styles.listContainer} 
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[theme.primary]}
+                tintColor={theme.primary}
+              />
+            }
+          >
             {visitors.map((visitor) => (
               <TouchableOpacity
                 key={visitor.id}
@@ -414,7 +424,7 @@ export default function VisitorsPage({ navigation }) {
                         borderColor: theme.border,
                       }
                     ]}
-                    placeholder="Börja skriva namn..."
+                    placeholder={t('placeholder.startTypingName')}
                     placeholderTextColor={theme.textTertiary}
                     value={formData.name}
                     onChangeText={handleNameChange}
@@ -455,7 +465,7 @@ export default function VisitorsPage({ navigation }) {
                       borderColor: theme.border,
                     }
                   ]}
-                  placeholder="Telefonnummer"
+                  placeholder={t('placeholder.phone')}
                   placeholderTextColor={theme.textTertiary}
                   value={formData.phone}
                   onChangeText={(text) => setFormData({ ...formData, phone: text })}
@@ -604,7 +614,7 @@ export default function VisitorsPage({ navigation }) {
                       borderColor: theme.border,
                     }
                   ]}
-                  placeholder="Extra information..."
+                  placeholder={t('placeholder.extraInfo')}
                   placeholderTextColor={theme.textTertiary}
                   value={formData.notes}
                   onChangeText={(text) => setFormData({ ...formData, notes: text })}
@@ -635,7 +645,7 @@ export default function VisitorsPage({ navigation }) {
       </Modal>
 
 
-    </SafeAreaView>
+    </HeaderView>
   );
 }
 

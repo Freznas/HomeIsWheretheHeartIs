@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { useNotesData } from '../../hooks/useAsyncStorage';
 
 export default function NotesSection({ navigation }) {
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const [notes] = useNotesData();
   const [noteCount, setNoteCount] = useState(0);
 
@@ -25,7 +27,7 @@ export default function NotesSection({ navigation }) {
     >
       <View style={styles.header}>
         <Text style={styles.icon}>📝</Text>
-        <Text style={[styles.title, { color: theme.text }]}>Anteckningar</Text>
+        <Text style={[styles.title, { color: theme.text }]}>{t('home.notes')}</Text>
       </View>
       <View style={styles.content}>
         <Text style={[styles.itemCount, { color: theme.warning }]}>

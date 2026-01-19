@@ -2,12 +2,14 @@ import React, { useRef, useEffect, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from "react-native";
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import { getUserHousehold, subscribeToCalendar } from '../../config/firebase';
 
 export default function HighlightSection({ navigation }) {
   const { theme } = useTheme();
   const { currentUser } = useAuth();
+  const { t } = useLanguage();
   const { scheduleEventReminder } = useNotifications();
   
   const scrollViewRef = useRef(null);
@@ -166,23 +168,23 @@ export default function HighlightSection({ navigation }) {
     <View style={[styles.card, { backgroundColor: theme.cardBackground, shadowColor: theme.shadow }]}>
       <View style={styles.header}>
         <Text style={styles.icon}>📅</Text>
-        <Text style={[styles.title, { color: theme.text }]}>Kommande Händelser</Text>
+        <Text style={[styles.title, { color: theme.text }]}>{t('home.upcomingEvents')}</Text>
         <TouchableOpacity 
           onPress={() => navigation?.navigate("CalendarPage")}
           style={styles.seeAllButton}
         >
-          <Text style={styles.seeAllText}>Se alla</Text>
+          <Text style={styles.seeAllText}>{t('home.seeAll')}</Text>
         </TouchableOpacity>
       </View>
       
       {loading ? (
         <View style={styles.loadingContainer}>
-          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Laddar händelser...</Text>
+          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>{t('home.loadingEvents')}</Text>
         </View>
       ) : upcomingEvents.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>🗓️ Inga kommande händelser</Text>
-          <Text style={[styles.emptySubtext, { color: theme.textTertiary }]}>Tryck på "Se alla" för att lägga till</Text>
+          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>🗓️ {t('home.noEvents')}</Text>
+          <Text style={[styles.emptySubtext, { color: theme.textTertiary }]}>{t('home.addEvent')}</Text>
         </View>
       ) : (
         <ScrollView 

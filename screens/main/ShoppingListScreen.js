@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -12,21 +12,28 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from "@react-native-picker/picker";
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { getUserHousehold, subscribeToShoppingList, addShoppingListItem, updateShoppingListItem, deleteShoppingListItem } from '../../config/firebase';
+import HeaderView from '../../components/common/HeaderView';
+import { SkeletonList, ShoppingItemSkeleton } from '../../components/common/SkeletonLoader';
 
 export default function ShoppingListPage({ navigation }) {
   const { theme } = useTheme();
   const { currentUser } = useAuth();
+  const { t } = useLanguage();
   
   // 🔥 Firebase state - realtidsuppdatering
   const [items, setItems] = useState([]);
   const [householdId, setHouseholdId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [newItemName, setNewItemName] = useState("");
   const [newItemQuantity, setNewItemQuantity] = useState("");
@@ -40,6 +47,12 @@ export default function ShoppingListPage({ navigation }) {
     { label: 'paket', value: 'paket', icon: '🎁' },
     { label: 'burk', value: 'burk', icon: '🥫' },
   ];
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadHouseholdAndShoppingList();
+    setRefreshing(false);
+  }, []);
 
   // 🔥 Load household and setup real-time listener
   useEffect(() => {
@@ -90,7 +103,7 @@ export default function ShoppingListPage({ navigation }) {
     if (!newItemName.trim()) return;
     
     if (!householdId) {
-      Alert.alert('Fel', 'Du måste vara med i ett hushåll för att lägga till varor.');
+      Alert.alert(t('error.title'), t('error.needHouseholdToAdd'));
       return;
     }
 
@@ -128,7 +141,7 @@ export default function ShoppingListPage({ navigation }) {
     }
   };
 
-  const renderItem = ({ item }) => (
+  const renderItem = useCallback(({ item }) => (
     <View style={[styles.itemCard, { backgroundColor: theme.cardBackground, shadowColor: theme.shadowColor, borderColor: theme.border }, item.completed && styles.completedItem]}>
       <TouchableOpacity 
         style={styles.itemContent}
@@ -154,6 +167,16 @@ export default function ShoppingListPage({ navigation }) {
         <Text style={styles.deleteIcon}>×</Text>
       </TouchableOpacity>
     </View>
+  ), [theme, toggleComplete, deleteItem]);
+
+  const completedCount = useMemo(() => 
+    (items || []).filter(item => item.completed).length,
+    [items]
+  );
+  
+  const totalCount = useMemo(() => 
+    (items || []).length,
+    [items]
   );
 
   // Loading state
@@ -199,49 +222,42 @@ export default function ShoppingListPage({ navigation }) {
     );
   }
 
-  const completedCount = (items || []).filter(item => item.completed).length;
-  const totalCount = (items || []).length;
-
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.headerBackground} />
-      
-      <View style={[styles.header, { backgroundColor: theme.headerBackground }]}>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={[styles.backIcon, { color: theme.headerText }]}>←</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: theme.headerText }]}>Inköpslista</Text>
-          <Text style={[styles.headerSubtitle, { color: theme.headerText, opacity: 0.8 }]}>
-            {completedCount}/{totalCount} klara
-          </Text>
-        </View>
-        <TouchableOpacity 
-          style={styles.addHeaderButton} 
-          onPress={() => setModalVisible(true)}
-        >
-          <Text style={styles.addHeaderIcon}>+</Text>
-        </TouchableOpacity>
-      </View>
+    <HeaderView
+      title={t('shopping.title')}
+      subtitle={`${completedCount}/${totalCount} klara`}
+      navigation={navigation}
+    >
 
       <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {loading ? (
+          <SkeletonList count={6} CardComponent={ShoppingItemSkeleton} />
+        ) : (
+          <>
         <FlatList
           data={items}
           keyExtractor={item => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[theme.primary]}
+              tintColor={theme.primary}
+            />
+          }
         />
         
         <TouchableOpacity 
           style={styles.addButton} 
           onPress={() => setModalVisible(true)}
         >
-          <Text style={styles.addButtonText}>+ Lägg till vara</Text>
+          <Text style={styles.addButtonText}>+ {t('shopping.add')}</Text>
         </TouchableOpacity>
+          </>
+        )}
       </View>
 
       <Modal
@@ -269,7 +285,7 @@ export default function ShoppingListPage({ navigation }) {
               <Text style={[styles.inputLabel, { color: theme.text }]}>Produktnamn</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text, borderColor: theme.border }]}
-                placeholder="T.ex. Mjölk, Bröd..."
+                placeholder={t('placeholder.items')}
                 placeholderTextColor={theme.textSecondary}
                 value={newItemName}
                 onChangeText={setNewItemName}
@@ -280,7 +296,7 @@ export default function ShoppingListPage({ navigation }) {
                 <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
                   <TextInput
                     style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text, borderColor: theme.border }]}
-                    placeholder="Antal"
+                    placeholder={t('placeholder.quantity')}
                     placeholderTextColor={theme.textSecondary}
                     value={newItemQuantity}
                     onChangeText={setNewItemQuantity}
@@ -334,19 +350,19 @@ export default function ShoppingListPage({ navigation }) {
 
             <View style={styles.modalActions}>
               <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.success }]} onPress={addItem}>
-                <Text style={[styles.saveButtonText, { color: theme.textInverse }]}>Lägg till</Text>
+                <Text style={[styles.saveButtonText, { color: theme.textInverse }]}>{t('common.add')}</Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.cancelButton, { borderColor: theme.border }]} 
                 onPress={() => setModalVisible(false)}
               >
-                <Text style={[styles.cancelButtonText, { color: theme.text }]}>Avbryt</Text>
+                <Text style={[styles.cancelButtonText, { color: theme.text }]}>{t('common.cancel')}</Text>
               </TouchableOpacity>
             </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </SafeAreaView>
+    </HeaderView>
   );
 }
 
@@ -354,6 +370,15 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: "#f8f9fa",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
   },
   header: {
     backgroundColor: "#3949ab",

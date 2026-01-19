@@ -13,9 +13,11 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { createHousehold, joinHousehold } from '../../config/firebase';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function HouseholdSetupScreen({ navigation, route }) {
   const { userId, email } = route.params || {};
+  const { t } = useLanguage();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [householdName, setHouseholdName] = useState('');
@@ -54,7 +56,7 @@ export default function HouseholdSetupScreen({ navigation, route }) {
             text: 'Fortsätt',
             onPress: () => {
               setShowCreateModal(false);
-              navigation.replace('MainNavigator');
+              navigation.replace('Home');
             },
           },
         ]
@@ -93,7 +95,7 @@ export default function HouseholdSetupScreen({ navigation, route }) {
             text: 'Fortsätt',
             onPress: () => {
               setShowJoinModal(false);
-              navigation.replace('MainNavigator');
+              navigation.replace('Home');
             },
           },
         ]

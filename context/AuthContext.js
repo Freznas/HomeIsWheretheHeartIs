@@ -1,15 +1,16 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Google from 'expo-auth-session/providers/google';
-import * as WebBrowser from 'expo-web-browser';
-
-WebBrowser.maybeCompleteAuthSession();
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile as firebaseUpdateProfile, sendEmailVerification } from 'firebase/auth';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { db } from '../config/firebase';
 
 const AuthContext = createContext();
 
+// Get Firebase Auth instance
+const auth = getAuth();
+
 const STORAGE_KEYS = {
   USER: '@user',
-  USERS_DB: '@users_db',
   IS_LOGGED_IN: '@is_logged_in',
 };
 
@@ -17,244 +18,169 @@ export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  
-  // Google OAuth Configuration - DISABLED until credentials are configured
-  // TODO: Ersätt med riktiga credentials från Google Cloud Console
-  /*
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    expoClientId: 'YOUR_EXPO_CLIENT_ID.apps.googleusercontent.com',
-    iosClientId: 'YOUR_IOS_CLIENT_ID.apps.googleusercontent.com',
-    androidClientId: 'YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com',
-    webClientId: 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com',
-  });
-  
-  // Hantera Google OAuth response
-  useEffect(() => {
-    if (response?.type === 'success') {
-      const { authentication } = response;
-      handleGoogleLogin(authentication.accessToken);
-    }
-  }, [response]);
-  */
 
   useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const [userStr, loggedIn] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEYS.USER),
-        AsyncStorage.getItem(STORAGE_KEYS.IS_LOGGED_IN),
-      ]);
-
-      if (loggedIn === 'true' && userStr) {
-        setCurrentUser(JSON.parse(userStr));
+    // Firebase Auth State Listener
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        // User is signed in - load user data from Firestore
+        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+        const userData = userDoc.exists() ? userDoc.data() : {};
+        
+        const user = {
+          id: firebaseUser.uid,
+          email: firebaseUser.email,
+          emailVerified: firebaseUser.emailVerified,
+          name: userData.name || firebaseUser.displayName || firebaseUser.email.split('@')[0],
+          avatar: userData.avatar || '👤',
+          role: userData.role || 'medlem',
+        };
+        
+        setCurrentUser(user);
         setIsLoggedIn(true);
+        await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+        await AsyncStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
+      } else {
+        // User is signed out
+        setCurrentUser(null);
+        setIsLoggedIn(false);
+        await AsyncStorage.removeItem(STORAGE_KEYS.USER);
+        await AsyncStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'false');
       }
-    } catch (error) {
-      console.error('Error loading user:', error);
-    } finally {
       setIsLoading(false);
-    }
-  };
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const register = async (userData) => {
     try {
-      // Hämta befintliga användare
-      const usersStr = await AsyncStorage.getItem(STORAGE_KEYS.USERS_DB);
-      const users = usersStr ? JSON.parse(usersStr) : [];
+      // Create Firebase Auth user
+      const userCredential = await createUserWithEmailAndPassword(
+        auth, 
+        userData.email, 
+        userData.password
+      );
+      
+      const firebaseUser = userCredential.user;
 
-      // Kolla om email redan finns
-      if (users.some(u => u.email === userData.email)) {
-        return { success: false, error: 'Email är redan registrerad' };
-      }
-
-      // Skapa ny användare
-      const newUser = {
-        id: Date.now().toString(),
-        email: userData.email,
-        password: userData.password, // I en riktig app skulle detta hashas!
+      // Create user document in Firestore
+      await setDoc(doc(db, 'users', firebaseUser.uid), {
         name: userData.name,
-        role: userData.role || 'medlem', // 'admin' eller 'medlem'
-        createdAt: new Date().toISOString(),
+        email: userData.email,
+        role: userData.role || 'medlem',
         avatar: userData.avatar || '👤',
+        createdAt: new Date().toISOString(),
+      });
+
+      // Update Firebase Auth profile
+      await firebaseUpdateProfile(firebaseUser, {
+        displayName: userData.name,
+      });
+
+      // Send email verification
+      await sendEmailVerification(firebaseUser);
+
+      const user = {
+        id: firebaseUser.uid,
+        email: firebaseUser.email,
+        emailVerified: firebaseUser.emailVerified,
+        name: userData.name,
+        avatar: userData.avatar || '👤',
+        role: userData.role || 'medlem',
       };
 
-      // Spara användare
-      users.push(newUser);
-      await AsyncStorage.setItem(STORAGE_KEYS.USERS_DB, JSON.stringify(users));
-
-      // Logga in automatiskt efter registrering
-      const userToSave = { ...newUser };
-      delete userToSave.password; // Ta inte med lösenord i sparad session
-
-      await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userToSave));
-      await AsyncStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
-
-      setCurrentUser(userToSave);
-      setIsLoggedIn(true);
-
-      return { success: true, user: userToSave };
+      return { success: true, user, message: 'Konto skapat! Kontrollera din email för att verifiera ditt konto.' };
     } catch (error) {
       console.error('Registration error:', error);
-      return { success: false, error: 'Ett fel uppstod vid registrering' };
+      
+      let errorMessage = 'Ett fel uppstod vid registrering';
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'Email är redan registrerad';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'Lösenordet måste vara minst 6 tecken';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Ogiltig email-adress';
+      }
+      
+      return { success: false, error: errorMessage };
     }
   };
 
   const login = async (email, password) => {
     try {
-      const usersStr = await AsyncStorage.getItem(STORAGE_KEYS.USERS_DB);
-      const users = usersStr ? JSON.parse(usersStr) : [];
-
-      const user = users.find(u => u.email === email && u.password === password);
-
-      if (!user) {
-        return { success: false, error: 'Fel email eller lösenord' };
-      }
-
-      const userToSave = { ...user };
-      delete userToSave.password;
-
-      await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userToSave));
-      await AsyncStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
-
-      setCurrentUser(userToSave);
-      setIsLoggedIn(true);
-
+      await signInWithEmailAndPassword(auth, email, password);
       return { success: true };
     } catch (error) {
       console.error('Login error:', error);
-      return { success: false, error: 'Ett fel uppstod vid inloggning' };
+      
+      let errorMessage = 'Ett fel uppstod vid inloggning';
+      if (error.code === 'auth/invalid-credential' || 
+          error.code === 'auth/user-not-found' || 
+          error.code === 'auth/wrong-password') {
+        errorMessage = 'Fel email eller lösenord';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Ogiltig email-adress';
+      }
+      
+      return { success: false, error: errorMessage };
     }
   };
 
   const logout = async () => {
     try {
-      await AsyncStorage.removeItem(STORAGE_KEYS.USER);
-      await AsyncStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'false');
-      setCurrentUser(null);
-      setIsLoggedIn(false);
+      await signOut(auth);
     } catch (error) {
       console.error('Logout error:', error);
     }
   };
 
-  const updateProfile = async (updates) => {
+  const resendVerificationEmail = async () => {
     try {
-      const updatedUser = { ...currentUser, ...updates };
-      await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(updatedUser));
-      
-      // Uppdatera även i users database
-      const usersStr = await AsyncStorage.getItem(STORAGE_KEYS.USERS_DB);
-      const users = usersStr ? JSON.parse(usersStr) : [];
-      const userIndex = users.findIndex(u => u.id === currentUser.id);
-      
-      if (userIndex !== -1) {
-        users[userIndex] = { ...users[userIndex], ...updates };
-        await AsyncStorage.setItem(STORAGE_KEYS.USERS_DB, JSON.stringify(users));
+      if (!auth.currentUser) {
+        return { success: false, error: 'Ingen användare inloggad' };
       }
       
+      if (auth.currentUser.emailVerified) {
+        return { success: false, error: 'Email är redan verifierad' };
+      }
+
+      await sendEmailVerification(auth.currentUser);
+      return { success: true, message: 'Verifieringsmail skickat! Kontrollera din inkorg.' };
+    } catch (error) {
+      console.error('Resend verification error:', error);
+      
+      let errorMessage = 'Kunde inte skicka verifieringsmail';
+      if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'För många försök. Vänta en stund innan du försöker igen.';
+      }
+      
+      return { success: false, error: errorMessage };
+    }
+  };
+
+  const updateProfile = async (updates) => {
+    try {
+      if (!currentUser) return { success: false, error: 'Ingen användare inloggad' };
+
+      // Update Firestore
+      await setDoc(doc(db, 'users', currentUser.id), updates, { merge: true });
+      
+      // Update Firebase Auth profile if name is updated
+      if (updates.name && auth.currentUser) {
+        await firebaseUpdateProfile(auth.currentUser, {
+          displayName: updates.name,
+        });
+      }
+
+      const updatedUser = { ...currentUser, ...updates };
       setCurrentUser(updatedUser);
+      await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(updatedUser));
+      
       return { success: true };
     } catch (error) {
       console.error('Update profile error:', error);
       return { success: false, error: 'Kunde inte uppdatera profil' };
-    }
-  };
-
-  const getAllUsers = async () => {
-    try {
-      const usersStr = await AsyncStorage.getItem(STORAGE_KEYS.USERS_DB);
-      const users = usersStr ? JSON.parse(usersStr) : [];
-      return users.map(u => {
-        const { password, ...userWithoutPassword } = u;
-        return userWithoutPassword;
-      });
-    } catch (error) {
-      console.error('Get all users error:', error);
-      return [];
-    }
-  };
-
-  const deleteUser = async (userId) => {
-    try {
-      const usersStr = await AsyncStorage.getItem(STORAGE_KEYS.USERS_DB);
-      const users = usersStr ? JSON.parse(usersStr) : [];
-      const filteredUsers = users.filter(u => u.id !== userId);
-      await AsyncStorage.setItem(STORAGE_KEYS.USERS_DB, JSON.stringify(filteredUsers));
-      return { success: true };
-    } catch (error) {
-      console.error('Delete user error:', error);
-      return { success: false, error: 'Kunde inte ta bort användare' };
-    }
-  };
-  
-  // Google OAuth - Starta inloggningsflödet
-  const loginWithGoogle = async () => {
-    try {
-      if (!request) {
-        return { success: false, error: 'Google OAuth är inte redo' };
-      }
-      
-      await promptAsync();
-      return { success: true };
-    } catch (error) {
-      console.error('Google login error:', error);
-      return { success: false, error: 'Google-inloggning misslyckades' };
-    }
-  };
-  
-  // Hantera Google token och skapa/hitta användare
-  const handleGoogleLogin = async (accessToken) => {
-    try {
-      // Hämta användarinfo från Google
-      const userInfoResponse = await fetch(
-        'https://www.googleapis.com/userinfo/v2/me',
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }
-      );
-      
-      const googleUser = await userInfoResponse.json();
-      
-      // Kolla om användaren redan finns
-      const usersStr = await AsyncStorage.getItem(STORAGE_KEYS.USERS_DB);
-      const users = usersStr ? JSON.parse(usersStr) : [];
-      
-      let user = users.find(u => u.email === googleUser.email);
-      
-      if (!user) {
-        // Skapa ny användare
-        user = {
-          id: Date.now().toString(),
-          email: googleUser.email,
-          name: googleUser.name,
-          role: 'medlem',
-          createdAt: new Date().toISOString(),
-          avatar: '👤',
-          googleId: googleUser.id,
-          authProvider: 'google',
-        };
-        
-        users.push(user);
-        await AsyncStorage.setItem(STORAGE_KEYS.USERS_DB, JSON.stringify(users));
-      }
-      
-      // Logga in användaren
-      const userToSave = { ...user };
-      delete userToSave.password;
-      
-      await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userToSave));
-      await AsyncStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
-      
-      setCurrentUser(userToSave);
-      setIsLoggedIn(true);
-      
-      return { success: true };
-    } catch (error) {
-      console.error('Handle Google login error:', error);
-      return { success: false, error: 'Kunde inte logga in med Google' };
     }
   };
 
@@ -268,10 +194,7 @@ export const AuthProvider = ({ children }) => {
         register,
         logout,
         updateProfile,
-        getAllUsers,
-        deleteUser,
-        loginWithGoogle: null, // Disabled until Google OAuth is configured
-        googleAuthRequest: null,
+        resendVerificationEmail,
       }}
     >
       {children}

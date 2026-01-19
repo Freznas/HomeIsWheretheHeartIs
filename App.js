@@ -16,6 +16,7 @@ import { PanGestureHandler, TapGestureHandler, State } from "react-native-gestur
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from './context/ThemeContext';
 import { useAuth } from './context/AuthContext';
+import { useLanguage } from './context/LanguageContext';
 import HeaderView from "./components/common/HeaderView";
 import HighlightSection from "./components/sections/HighlightSection";
 import CalendarSection from "./components/sections/CalendarSection";
@@ -35,6 +36,7 @@ export default function App({ navigation }) {
   // 🎨 Hämta tema och dark mode toggle
   const { theme, isDarkMode, toggleTheme } = useTheme();
   const { isLoggedIn, currentUser } = useAuth();
+  const { language, toggleLanguage, t } = useLanguage();
   
   // 🔄 Force re-render när man navigerar tillbaka till startsidan
   const [refreshKey, setRefreshKey] = useState(0);
@@ -211,6 +213,12 @@ export default function App({ navigation }) {
               <Text style={styles.themeIcon}>{isDarkMode ? '☀️' : '🌙'}</Text>
             </TouchableOpacity>
             <TouchableOpacity 
+              style={[styles.languageButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]} 
+              onPress={toggleLanguage}
+            >
+              <Text style={styles.languageIcon}>{language === 'sv' ? '🇬🇧' : '🇸🇪'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
               style={[styles.supportButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]} 
               onPress={() => navigation?.navigate('Support')}
             >
@@ -225,10 +233,10 @@ export default function App({ navigation }) {
           </View>
           <View style={styles.headerContent}>
             <Text style={[styles.headerTitle, { color: theme.headerText }]}>
-              Home is Where the Hearth is
+              {t('header.home')}
             </Text>
             <Text style={[styles.headerGreeting, { color: theme.headerText }]}>
-              Välkommen {currentUser?.name || 'Gäst'}
+              {t('header.welcome')} {currentUser?.name || t('header.guest')}
             </Text>
           </View>
         </View>
@@ -391,6 +399,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   themeIcon: {
+    fontSize: 16,
+  },
+  languageButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  languageIcon: {
     fontSize: 16,
   },
   supportButton: {

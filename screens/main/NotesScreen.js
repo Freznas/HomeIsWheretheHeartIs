@@ -1,20 +1,31 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
+import React, { useState, useMemo, useCallback } from "react";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, RefreshControl } from "react-native";
 import { useNotesData } from '../../hooks/useAsyncStorage';
 import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
 import HeaderView from '../../components/common/HeaderView';
+import { SkeletonList, NoteItemSkeleton } from '../../components/common/SkeletonLoader';
 
 export default function NotesPage({ navigation }) {
   // 💾 AsyncStorage hook - hanterar all data automatiskt
   const [notesList, setNotesList, removeNotesData, loading] = useNotesData();
   const { theme } = useTheme();
+  const { t } = useLanguage();
+  const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [newTitle, setNewTitle] = useState("");
   const [newContent, setNewContent] = useState("");
   const [errors, setErrors] = useState({});
 
-  const renderItem = ({ item }) => (
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    // Data kommer från useNotesData hook som läser från AsyncStorage
+    // Simulera kort refresh för bättre UX
+    setTimeout(() => setRefreshing(false), 300);
+  }, []);
+
+  const renderItem = useCallback(({ item }) => (
     <TouchableOpacity 
       style={[styles.itemCard, { backgroundColor: theme.cardBackground, shadowColor: theme.shadowColor, borderColor: theme.border }]} 
       onPress={() => openEditModal(item)}
@@ -23,7 +34,7 @@ export default function NotesPage({ navigation }) {
       <Text style={[styles.itemName, { color: theme.text }]}>{item.title}</Text>
       <Text style={[styles.itemDetails, { color: theme.textSecondary }]}>{item.content}</Text>
     </TouchableOpacity>
-  );
+  ), [theme, openEditModal]);
 
   const openEditModal = (item) => {
     setEditingItem(item);
@@ -95,15 +106,22 @@ export default function NotesPage({ navigation }) {
   // Loading state
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text>Laddar anteckningar...</Text>
-      </View>
+      <HeaderView
+        title={t('notes.title')}
+        onBackPress={() => navigation.goBack()}
+        onProfilePress={() => navigation.navigate('Profile')}
+        onSupportPress={() => navigation.navigate('Support')}
+      >
+        <View style={[styles.container, { backgroundColor: theme.background }]}>
+          <SkeletonList count={4} CardComponent={NoteItemSkeleton} />
+        </View>
+      </HeaderView>
     );
   }
 
   return (
     <HeaderView
-      title="Anteckningar"
+      title={t('notes.title')}
       onBackPress={() => navigation.goBack()}
       onProfilePress={() => navigation.navigate('Profile')}
       onSupportPress={() => navigation.navigate('Support')}
@@ -114,9 +132,17 @@ export default function NotesPage({ navigation }) {
           keyExtractor={item => item.id}
           renderItem={renderItem}
           contentContainerStyle={{ paddingBottom: 24 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[theme.primary]}
+              tintColor={theme.primary}
+            />
+          }
         />
         <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
-          <Text style={styles.addButtonText}>+ Lägg till anteckning</Text>
+          <Text style={styles.addButtonText}>+ {t('notes.add')}</Text>
         </TouchableOpacity>
         <Modal
           visible={modalVisible}
@@ -130,7 +156,7 @@ export default function NotesPage({ navigation }) {
           >
             <View style={[styles.modalContent, { backgroundColor: theme.modalBackground }]}>
               <Text style={[styles.modalTitle, { color: theme.text }]}>
-                {editingItem ? "Redigera anteckning" : "Lägg till anteckning"}
+                {editingItem ? t('notes.edit') : t('notes.add')}
               </Text>
               
               <TextInput
@@ -163,16 +189,16 @@ export default function NotesPage({ navigation }) {
               <View style={styles.modalButtons}>
                 <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.success }]} onPress={handleSave}>
                   <Text style={[styles.modalButtonText, { color: theme.textInverse }]}>
-                    {editingItem ? "Uppdatera" : "Lägg till"}
+                    {editingItem ? t('common.edit') : t('common.add')}
                   </Text>
                 </TouchableOpacity>
                 {editingItem && (
                   <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.error }]} onPress={handleDelete}>
-                    <Text style={[styles.modalButtonText, { color: theme.textInverse }]}>Ta bort</Text>
+                    <Text style={[styles.modalButtonText, { color: theme.textInverse }]}>{t('common.delete')}</Text>
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.cardBackground, borderColor: theme.border, borderWidth: 1 }]} onPress={() => { setModalVisible(false); setErrors({}); }}>
-                  <Text style={[styles.modalButtonText, { color: theme.text }]}>Avbryt</Text>
+                  <Text style={[styles.modalButtonText, { color: theme.text }]}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
               </View>
             </View>

@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================
+    // HELPER FUNCTIONS
+    // ============================================
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    function getUserHouseholdId() {
+      return get(/databases/$(database)/documents/userHouseholds/$(request.auth.uid)).data.householdId;
+    }
+    
+    function isMemberOfHousehold(householdId) {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/userHouseholds/$(request.auth.uid)) &&
+             getUserHouseholdId() == householdId;
+    }
+    
+    // ============================================
+    // USERS COLLECTION
+    // ============================================
+    
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId);
+    }
+    
+    // ============================================
+    // HOUSEHOLDS COLLECTION
+    // ============================================
+    
+    match /households/{householdId} {
+      allow create: if isSignedIn() && 
+                      request.resource.data.createdBy == request.auth.uid;
+      allow read: if isMemberOfHousehold(householdId);
+      allow update, delete: if isSignedIn() && 
+                              resource.data.createdBy == request.auth.uid;
+    }
+    
+    // ============================================
+    // USER HOUSEHOLDS MAPPING
+    // ============================================
+    
+    match /userHouseholds/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    // ============================================
+    // HOUSEHOLD DATA
+    // ============================================
+    
+    match /householdData/{householdId}/{collection}/{docId} {
+      allow read, write: if isMemberOfHousehold(householdId);
+    }
+    
+    // ============================================
+    // DENY ALL OTHER ACCESS
+    // ============================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

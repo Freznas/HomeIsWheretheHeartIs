@@ -16,6 +16,8 @@ import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 // Notifications Context för notifikationer
 import { NotificationsProvider } from './context/NotificationsContext';
+// Language Context för språkbyten
+import { LanguageProvider } from './context/LanguageContext';
 
 // STEG 2: Importera alla sidor som ska vara navigerbara
 // Varje import representerar en skärm som användaren kan navigera till
@@ -94,16 +96,18 @@ export default function Navigation() {
   return (
     // STEG 4.5: ThemeProvider och AuthProvider - Wrappa allt i contexts
     <ThemeProvider>
-      <AuthProvider>
-        <NotificationsProvider>
-          {/* STEG 5: NavigationContainer - MÅSTE wrappa all navigation
-              Fungerar som en "manager" för all navigation i hela appen
-              Håller reda på nuvarande skärm, navigation history, och hanterar deep links */}
-          <NavigationContainer>
-            <NavigationContent />
-          </NavigationContainer>
-        </NotificationsProvider>
-      </AuthProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <NotificationsProvider>
+            {/* STEG 5: NavigationContainer - MÅSTE wrappa all navigation
+                Fungerar som en "manager" för all navigation i hela appen
+                Håller reda på nuvarande skärm, navigation history, och hanterar deep links */}
+            <NavigationContainer>
+              <NavigationContent />
+            </NavigationContainer>
+          </NotificationsProvider>
+        </AuthProvider>
+      </LanguageProvider>
     </ThemeProvider>
   );
 }

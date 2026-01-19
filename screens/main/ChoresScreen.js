@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,20 +10,26 @@ import {
   Modal,
   TextInput,
   Alert,
+  RefreshControl,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { getUserHousehold, subscribeToChores, addChore, updateChore, deleteChore } from '../../config/firebase';
+import HeaderView from '../../components/common/HeaderView';
+import { SkeletonList, ChoreItemSkeleton } from '../../components/common/SkeletonLoader';
 
 export default function ChoresPage({ navigation }) {
   const { theme } = useTheme();
   const { currentUser } = useAuth();
+  const { t } = useLanguage();
   
   // 🔥 Firebase state - realtidsuppdatering
   const [chores, setChores] = useState([]);
   const [householdId, setHouseholdId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   
   const [modalVisible, setModalVisible] = useState(false);
   const [newTask, setNewTask] = useState("");
@@ -66,6 +72,7 @@ export default function ChoresPage({ navigation }) {
         }
       } catch (error) {
         console.error('ChoresScreen: Error loading household:', error);
+        Alert.alert('Fel', 'Kunde inte ladda hushållsinformation');
         setLoading(false);
       }
     };
@@ -77,6 +84,12 @@ export default function ChoresPage({ navigation }) {
       if (unsubscribe) unsubscribe();
     };
   }, [currentUser]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    // Firebase realtidsuppdatering sköter refresh automatiskt
+    setTimeout(() => setRefreshing(false), 500);
+  }, []);
 
   const toggleComplete = async (id) => {
     if (!householdId) return;
@@ -143,7 +156,7 @@ export default function ChoresPage({ navigation }) {
     }
   };
 
-  const renderChore = ({ item }) => (
+  const renderChore = useCallback(({ item }) => (
     <TouchableOpacity 
       style={[styles.choreCard, { backgroundColor: theme.cardBackground, shadowColor: theme.shadowColor, borderColor: theme.border }, item.completed && styles.completedChore]}
       onPress={() => toggleComplete(item.id)}
@@ -165,44 +178,29 @@ export default function ChoresPage({ navigation }) {
         </View>
       </View>
     </TouchableOpacity>
-  );
+  ), [theme, toggleComplete]);
 
-  const completedCount = chores.filter(chore => chore.completed).length;
+  const completedCount = useMemo(() => chores.filter(chore => chore.completed).length, [chores]);
 
   // Show loading state while data is being fetched
   if (loading) {
     return (
-      <View style={[styles.container, styles.centerContent]}>
-        <Text style={styles.loadingText}>Laddar sysslor...</Text>
-      </View>
+      <HeaderView
+        title={t('chores.title')}
+        navigation={navigation}
+      >
+        <View style={[styles.container, { backgroundColor: theme.background }]}>
+          <SkeletonList count={5} CardComponent={ChoreItemSkeleton} />
+        </View>
+      </HeaderView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.headerBackground} />
-      
-      <View style={[styles.header, { backgroundColor: theme.headerBackground }]}>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={[styles.backIcon, { color: theme.headerText }]}>←</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: theme.headerText }]}>Sysslor</Text>
-          <Text style={[styles.headerSubtitle, { color: theme.headerText, opacity: 0.8 }]}>
-            {completedCount}/{chores.length} klara
-          </Text>
-        </View>
-        <TouchableOpacity 
-          style={styles.addHeaderButton} 
-          onPress={() => setModalVisible(true)}
-        >
-          <Text style={styles.addHeaderIcon}>+</Text>
-        </TouchableOpacity>
-      </View>
-
+    <HeaderView
+      title={t('chores.title')}
+      navigation={navigation}
+    >
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         {chores.length === 0 ? (
           <View style={styles.emptyState}>
@@ -220,6 +218,14 @@ export default function ChoresPage({ navigation }) {
             renderItem={renderChore}
             contentContainerStyle={styles.listContainer}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[theme.primary]}
+                tintColor={theme.primary}
+              />
+            }
           />
         )}
         
@@ -227,7 +233,7 @@ export default function ChoresPage({ navigation }) {
           style={styles.addButton} 
           onPress={() => setModalVisible(true)}
         >
-          <Text style={styles.addButtonText}>+ Lägg till syssla</Text>
+          <Text style={styles.addButtonText}>+ {t('chores.add')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -271,19 +277,19 @@ export default function ChoresPage({ navigation }) {
 
             <View style={styles.modalActions}>
               <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.success }]} onPress={handleAddChore}>
-                <Text style={[styles.saveButtonText, { color: theme.textInverse }]}>Lägg till</Text>
+                <Text style={[styles.saveButtonText, { color: theme.textInverse }]}>{t('common.add')}</Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.cancelButton, { borderColor: theme.border }]} 
                 onPress={() => setModalVisible(false)}
               >
-                <Text style={[styles.cancelButtonText, { color: theme.text }]}>Avbryt</Text>
+                <Text style={[styles.cancelButtonText, { color: theme.text }]}>{t('common.cancel')}</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </HeaderView>
   );
 }
 

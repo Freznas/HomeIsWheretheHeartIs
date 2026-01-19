@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
 import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
 import * as Location from 'expo-location';
 
 export default function WeatherSection({ navigation }) {
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [weatherData, setWeatherData] = useState(null);
   const [error, setError] = useState(false);
@@ -60,32 +62,33 @@ export default function WeatherSection({ navigation }) {
 
   const getWeatherInfo = (code) => {
     const weatherCodes = {
-      0: { emoji: '☀️', description: 'Klar himmel' },
-      1: { emoji: '🌤️', description: 'Mestadels klart' },
-      2: { emoji: '⛅', description: 'Delvis molnigt' },
-      3: { emoji: '☁️', description: 'Mulet' },
-      45: { emoji: '🌫️', description: 'Dimma' },
-      48: { emoji: '🌫️', description: 'Rimfrost' },
-      51: { emoji: '🌦️', description: 'Lätt duggregn' },
-      53: { emoji: '🌦️', description: 'Duggregn' },
-      55: { emoji: '🌧️', description: 'Kraftigt duggregn' },
-      61: { emoji: '🌧️', description: 'Lätt regn' },
-      63: { emoji: '🌧️', description: 'Regn' },
-      65: { emoji: '🌧️', description: 'Kraftigt regn' },
-      71: { emoji: '🌨️', description: 'Lätt snöfall' },
-      73: { emoji: '🌨️', description: 'Snöfall' },
-      75: { emoji: '🌨️', description: 'Kraftigt snöfall' },
-      77: { emoji: '🌨️', description: 'Snökorn' },
-      80: { emoji: '🌦️', description: 'Lätta regnskurar' },
-      81: { emoji: '🌧️', description: 'Regnskurar' },
-      82: { emoji: '⛈️', description: 'Kraftiga regnskurar' },
-      85: { emoji: '🌨️', description: 'Snöbyar' },
-      86: { emoji: '🌨️', description: 'Kraftiga snöbyar' },
-      95: { emoji: '⛈️', description: 'Åskväder' },
-      96: { emoji: '⛈️', description: 'Åska med hagel' },
-      99: { emoji: '⛈️', description: 'Kraftig åska med hagel' },
+      0: { emoji: '☀️', key: 'weather.clearSky' },
+      1: { emoji: '🌤️', key: 'weather.mostlyClear' },
+      2: { emoji: '⛅', key: 'weather.partlyCloudy' },
+      3: { emoji: '☁️', key: 'weather.overcast' },
+      45: { emoji: '🌫️', key: 'weather.fog' },
+      48: { emoji: '🌫️', key: 'weather.rime' },
+      51: { emoji: '🌦️', key: 'weather.lightDrizzle' },
+      53: { emoji: '🌦️', key: 'weather.drizzle' },
+      55: { emoji: '🌧️', key: 'weather.heavyDrizzle' },
+      61: { emoji: '🌧️', key: 'weather.lightRain' },
+      63: { emoji: '🌧️', key: 'weather.rain' },
+      65: { emoji: '🌧️', key: 'weather.heavyRain' },
+      71: { emoji: '🌨️', key: 'weather.lightSnow' },
+      73: { emoji: '🌨️', key: 'weather.snow' },
+      75: { emoji: '🌨️', key: 'weather.heavySnow' },
+      77: { emoji: '🌨️', key: 'weather.snowGrains' },
+      80: { emoji: '🌦️', key: 'weather.lightShowers' },
+      81: { emoji: '🌧️', key: 'weather.showers' },
+      82: { emoji: '⛈️', key: 'weather.heavyShowers' },
+      85: { emoji: '🌨️', key: 'weather.snowShowers' },
+      86: { emoji: '🌨️', key: 'weather.heavySnowShowers' },
+      95: { emoji: '⛈️', key: 'weather.thunderstorm' },
+      96: { emoji: '⛈️', key: 'weather.thunderstormHail' },
+      99: { emoji: '⛈️', key: 'weather.severeThunderstorm' },
     };
-    return weatherCodes[code] || { emoji: '🌡️', description: 'Okänt väder' };
+    const weather = weatherCodes[code] || { emoji: '🌡️', key: 'weather.unknown' };
+    return { emoji: weather.emoji, description: t(weather.key) };
   };
 
   if (loading) {
@@ -96,8 +99,8 @@ export default function WeatherSection({ navigation }) {
         onPress={() => navigation.navigate('WeatherPage')}
       >
         <View style={styles.header}>
-          <Text style={styles.icon}>🌤️</Text>
-          <Text style={[styles.title, { color: theme.text }]}>Väder</Text>
+          <Text style={styles.icon}>⚠️</Text>
+          <Text style={[styles.title, { color: theme.text }]}>{t('home.weather')}</Text>
         </View>
         <View style={styles.weatherInfo}>
           <ActivityIndicator size="small" color={theme.primary} />
@@ -115,10 +118,10 @@ export default function WeatherSection({ navigation }) {
       >
         <View style={styles.header}>
           <Text style={styles.icon}>🌤️</Text>
-          <Text style={[styles.title, { color: theme.text }]}>Väder</Text>
+          <Text style={[styles.title, { color: theme.text }]}>{t('home.weather')}</Text>
         </View>
         <View style={styles.weatherInfo}>
-          <Text style={[styles.errorText, { color: theme.textSecondary }]}>Kunde inte hämta väder</Text>
+          <Text style={[styles.errorText, { color: theme.textSecondary }]}>{t('weather.error')}</Text>
         </View>
       </TouchableOpacity>
     );
@@ -132,7 +135,7 @@ export default function WeatherSection({ navigation }) {
     >
       <View style={styles.header}>
         <Text style={styles.icon}>{weatherData.emoji}</Text>
-        <Text style={[styles.title, { color: theme.text }]}>Väder</Text>
+        <Text style={[styles.title, { color: theme.text }]}>{t('home.weather')}</Text>
       </View>
       <View style={styles.weatherInfo}>
         <Text style={[styles.temperature, { color: theme.primary }]}>{weatherData.temp}°</Text>

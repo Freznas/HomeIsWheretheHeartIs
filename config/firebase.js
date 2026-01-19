@@ -1,24 +1,29 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
+import { getAuth } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, where, onSnapshot, deleteDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 // Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// Using environment variables for security
 const firebaseConfig = {
-  apiKey: "AIzaSyBzv2NAF-tah4mg1Tb68EM4bzsYNcuTtfc",
-  authDomain: "home-is-where-the-hearth-is.firebaseapp.com",
-  projectId: "home-is-where-the-hearth-is",
-  storageBucket: "home-is-where-the-hearth-is.firebasestorage.app",
-  messagingSenderId: "694290922820",
-  appId: "1:694290922820:web:6709fe1d2a36990b10ab11",
-  measurementId: "G-2GEHK78VQ0"
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
+const auth = getAuth(app);
 const db = getFirestore(app);
+
+// Export for use in other modules
+export { auth, db };
 
 // ============================================
 // HOUSEHOLD FUNCTIONS
@@ -49,18 +54,19 @@ export const createHousehold = async (householdName, userId, email, displayName 
         email,
         displayName: displayName || email.split('@')[0],
         role: 'admin',
-        joinedAt: serverTimestamp(),
+        joinedAt: new Date().toISOString(),
       }],
     };
 
-    // Spara hushållet i Firestore
-    await setDoc(doc(db, 'households', householdId), householdData);
-
-    // Koppla användaren till hushållet
+    // VIKTIGT: Koppla användaren till hushållet FÖRST (innan household skapas)
+    // Detta gör att Security Rules kan verifiera membership
     await setDoc(doc(db, 'userHouseholds', userId), {
       householdId,
       joinedAt: serverTimestamp(),
     });
+
+    // Sedan spara hushållet i Firestore
+    await setDoc(doc(db, 'households', householdId), householdData);
 
     return { success: true, household: householdData };
   } catch (error) {
@@ -107,7 +113,7 @@ export const joinHousehold = async (inviteCode, userId, email, displayName = nul
       email: email,
       displayName: displayName || email.split('@')[0],
       role: 'member',
-      joinedAt: serverTimestamp(),
+      joinedAt: new Date().toISOString(),
     };
 
     const updatedMembers = [...(household.members || []), newMember];
@@ -1137,5 +1143,3 @@ export const deleteChatMessage = async (householdId, messageId) => {
     return { success: false, error: error.message };
   }
 };
-
-export { db };

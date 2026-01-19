@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { getUserHousehold, subscribeToBills } from '../../config/firebase';
 
 export default function BillsSection({ navigation }) {
   const { theme } = useTheme();
   const { currentUser } = useAuth();
+  const { t } = useLanguage();
   const [bills, setBills] = useState([]);
   const [nextBill, setNextBill] = useState(null);
   const [billCount, setBillCount] = useState(0);
@@ -82,10 +84,10 @@ export default function BillsSection({ navigation }) {
     const diffTime = date - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
-    if (diffDays === 0) return 'Idag!';
-    if (diffDays === 1) return 'Imorgon';
-    if (diffDays < 0) return `${Math.abs(diffDays)} dagar sen`;
-    if (diffDays <= 7) return `Om ${diffDays} dagar`;
+    if (diffDays === 0) return t('bills.today');
+    if (diffDays === 1) return t('bills.tomorrow');
+    if (diffDays < 0) return `${Math.abs(diffDays)} ${t('bills.daysAgo')}`;
+    if (diffDays <= 7) return `${t('bills.inDays')} ${diffDays} ${t('bills.days')}`;
     
     return date.toLocaleDateString('sv-SE', { month: 'short', day: 'numeric' });
   };
@@ -98,11 +100,11 @@ export default function BillsSection({ navigation }) {
     >
       <View style={styles.header}>
         <Text style={styles.icon}>💳</Text>
-        <Text style={[styles.title, { color: theme.text }]}>Räkningar</Text>
+        <Text style={[styles.title, { color: theme.text }]}>{t('home.bills')}</Text>
       </View>
       <View style={styles.content}>
         <Text style={[styles.itemCount, { color: theme.error }]}>
-          {billCount} {billCount === 1 ? 'räkning' : 'räkningar'}
+          {billCount} {billCount === 1 ? t('bills.bill') : t('bills.bills')}
         </Text>
         {nextBill ? (
           <View style={styles.nextBillInfo}>
@@ -115,13 +117,13 @@ export default function BillsSection({ navigation }) {
           </View>
         ) : (
           <Text style={[styles.dueInfo, { color: theme.textSecondary }]}>
-            Inga obetalda räkningar
+            {t('bills.noUnpaid')}
           </Text>
-        )}
+        )})
       </View>
       {nextBill && (
         <View style={[styles.statusBadge, { backgroundColor: theme.error + '20' }]}>
-          <Text style={[styles.statusText, { color: theme.error }]}>Uppmärksamhet</Text>
+          <Text style={[styles.statusText, { color: theme.error }]}>{t('bills.attention')}</Text>
         </View>
       )}
     </TouchableOpacity>

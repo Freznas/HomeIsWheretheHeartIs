@@ -48,6 +48,16 @@ export default StyleSheet.create({
   themeIcon: {
     fontSize: 16,
   },
+  languageButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  languageIcon: {
+    fontSize: 16,
+  },
   supportButton: {
     width: 32,
     height: 32,

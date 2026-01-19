@@ -20,7 +20,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { useNotifications } from '../../context/NotificationsContext';
+import HeaderView from '../../components/common/HeaderView';
 import { getUserHousehold, subscribeToHousehold, leaveHousehold as leaveHouseholdFirebase, removeMember as removeMemberFirebase } from '../../config/firebase';
 
 // Hushållssektion komponent
@@ -55,6 +57,7 @@ function HouseholdSection({ theme, navigation, currentUser, showToast }) {
       }
     } catch (error) {
       console.error('Error loading household:', error);
+      Alert.alert(t('error.title'), t('error.loadHousehold'));
     } finally {
       setLoading(false);
     }
@@ -75,6 +78,7 @@ function HouseholdSection({ theme, navigation, currentUser, showToast }) {
         });
       } catch (error) {
         console.error('Error sharing:', error);
+        Alert.alert(t('error.title'), t('error.shareInvite'));
       }
     }
   };
@@ -276,7 +280,8 @@ function HouseholdSection({ theme, navigation, currentUser, showToast }) {
 
 export default function ProfilePage({ navigation }) {
   const { theme, isDarkMode, toggleTheme } = useTheme();
-  const { currentUser, updateProfile, logout, deleteUser } = useAuth();
+  const { currentUser, updateProfile, logout, deleteUser, resendVerificationEmail } = useAuth();
+  const { t } = useLanguage();
   const { settings: notificationSettings, updateSettings: updateNotificationSettings, sendNotification, scheduleNotification } = useNotifications();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -392,8 +397,12 @@ export default function ProfilePage({ navigation }) {
     setCodeExpiry(expiry);
     
     try {
-      // TODO: Byt till din server-URL när du deployar
-      const API_URL = __DEV__ ? 'http://172.20.10.4:3000' : 'https://your-api.com';
+      const API_URL = process.env.EXPO_PUBLIC_API_URL;
+      
+      if (!API_URL) {
+        showToast('❌ Ingen API URL konfigurerad', 'error');
+        return;
+      }
       
       const response = await fetch(`${API_URL}/api/auth/send-2fa-code`, {
         method: 'POST',
@@ -643,32 +652,21 @@ export default function ProfilePage({ navigation }) {
     showToast('📤 Test-notifikationer skickade!', 'info');
   };
 
+  const handleResendVerification = async () => {
+    const result = await resendVerificationEmail();
+    if (result.success) {
+      showToast(result.message, 'success');
+    } else {
+      showToast(result.error, 'error');
+    }
+  };
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar 
-        barStyle={isDarkMode ? "light-content" : "dark-content"} 
-        backgroundColor={theme.headerBackground} 
-      />
-      
-      {/* Modern Header */}
-      <View style={[styles.header, { backgroundColor: theme.headerBackground }]}>
-        <View style={styles.headerContent}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Text style={styles.backIcon}>←</Text>
-          </TouchableOpacity>
-          <View style={styles.headerTitleContainer}>
-            <Text style={[styles.headerGreeting, { color: theme.headerText }]}>
-              Min Profil
-            </Text>
-            <Text style={[styles.headerTitle, { color: theme.headerText }]}>
-              {currentUser?.name}
-            </Text>
-          </View>
-          <View style={styles.headerAvatarContainer}>
-            <Text style={styles.headerAvatar}>{currentUser?.avatar || '👤'}</Text>
-          </View>
-        </View>
-      </View>
+    <HeaderView
+      title={t('profile.title')}
+      subtitle={currentUser?.name}
+      navigation={navigation}
+    >
 
       <ScrollView 
         style={styles.content} 
@@ -713,10 +711,10 @@ export default function ProfilePage({ navigation }) {
 
         {/* User Info Section */}
         <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Information</Text>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('profile.information')}</Text>
           
           <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: theme.textSecondary }]}>Namn</Text>
+            <Text style={[styles.label, { color: theme.textSecondary }]}>{t('profile.name')}</Text>
             {isEditing ? (
               <TextInput
                 style={[styles.input, { 
@@ -726,7 +724,7 @@ export default function ProfilePage({ navigation }) {
                 }]}
                 value={name}
                 onChangeText={setName}
-                placeholder="Ditt namn"
+                placeholder={t('placeholder.yourName')}
                 placeholderTextColor={theme.textSecondary}
               />
             ) : (
@@ -737,25 +735,39 @@ export default function ProfilePage({ navigation }) {
           </View>
 
           <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: theme.textSecondary }]}>E-post</Text>
-            <Text style={[styles.infoText, { color: theme.text }]}>
-              {currentUser?.email}
-            </Text>
+            <Text style={[styles.label, { color: theme.textSecondary }]}>{t('profile.email')}</Text>
+            <View style={styles.emailContainer}>
+              <Text style={[styles.infoText, { color: theme.text }]}>
+                {currentUser?.email}
+              </Text>
+              {currentUser?.emailVerified ? (
+                <View style={styles.verifiedBadge}>
+                  <Text style={styles.verifiedText}>{t('profile.emailVerified')}</Text>
+                </View>
+              ) : (
+                <TouchableOpacity 
+                  style={styles.verifyButton}
+                  onPress={handleResendVerification}
+                >
+                  <Text style={styles.verifyButtonText}>{t('profile.emailNotVerified')}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
 
           <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: theme.textSecondary }]}>Roll</Text>
+            <Text style={[styles.label, { color: theme.textSecondary }]}>{t('profile.role')}</Text>
             <View style={[styles.roleBadge, { 
               backgroundColor: currentUser?.role === 'admin' ? '#FF6B6B' : '#4ECDC4' 
             }]}>
               <Text style={styles.roleText}>
-                {currentUser?.role === 'admin' ? 'Admin' : 'Medlem'}
+                {currentUser?.role === 'admin' ? t('profile.admin') : t('profile.member')}
               </Text>
             </View>
           </View>
 
           <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: theme.textSecondary }]}>Medlem sedan</Text>
+            <Text style={[styles.label, { color: theme.textSecondary }]}>{t('profile.memberSince')}</Text>
             <Text style={[styles.infoText, { color: theme.text }]}>
               {new Date(currentUser?.createdAt).toLocaleDateString('sv-SE')}
             </Text>
@@ -948,7 +960,7 @@ export default function ProfilePage({ navigation }) {
               }]}
               value={currentPassword}
               onChangeText={setCurrentPassword}
-              placeholder="Nuvarande lösenord"
+              placeholder={t('placeholder.currentPassword')}
               placeholderTextColor={theme.textSecondary}
               secureTextEntry
             />
@@ -1191,7 +1203,7 @@ export default function ProfilePage({ navigation }) {
           <Text style={styles.toastText}>{toast.message}</Text>
         </Animated.View>
       )}
-    </SafeAreaView>
+    </HeaderView>
   );
 }
 
@@ -1446,6 +1458,38 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 16,
+  },
+  emailContainer: {
+    flexDirection: 'column',
+    gap: 8,
+  },
+  verifiedBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(76, 175, 80, 0.3)',
+  },
+  verifiedText: {
+    color: '#4CAF50',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  verifyButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 152, 0, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 152, 0, 0.3)',
+  },
+  verifyButtonText: {
+    color: '#FF9800',
+    fontSize: 12,
+    fontWeight: '600',
   },
   input: {
     fontSize: 16,

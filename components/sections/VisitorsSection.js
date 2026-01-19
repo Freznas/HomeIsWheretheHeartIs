@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { useVisitorsData } from '../../hooks/useAsyncStorage';
 
 export default function VisitorsSection({ navigation }) {
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const [allVisitors] = useVisitorsData();
   const [visitors, setVisitors] = useState([]);
   const [nextVisitor, setNextVisitor] = useState(null);
@@ -68,7 +70,7 @@ export default function VisitorsSection({ navigation }) {
     >
       <View style={styles.header}>
         <Text style={styles.icon}>👥</Text>
-        <Text style={[styles.title, { color: theme.text }]}>Besökare</Text>
+        <Text style={[styles.title, { color: theme.text }]}>{t('home.visitors')}</Text>
       </View>
       <View style={styles.content}>
         {visitors.length > 0 ? (

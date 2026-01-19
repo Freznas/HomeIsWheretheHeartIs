@@ -2,11 +2,13 @@ import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { getUserHousehold, subscribeToCalendar } from '../../config/firebase';
 
 export default function CalendarSection({ navigation }) {
   const { theme } = useTheme();
   const { currentUser } = useAuth();
+  const { t } = useLanguage();
   const [userEventCount, setUserEventCount] = useState(0);
   const [nextEvent, setNextEvent] = useState(null);
 
@@ -75,7 +77,7 @@ export default function CalendarSection({ navigation }) {
     >
       <View style={styles.header}>
         <Text style={styles.icon}>📅</Text>
-        <Text style={[styles.title, { color: theme.text }]}>Kalender</Text>
+        <Text style={[styles.title, { color: theme.text }]}>{t('home.calendar')}</Text>
       </View>
       <View style={styles.dateContainer}>
         <Text style={[styles.day, { color: theme.primary }]}>{displayDate.day}</Text>
@@ -83,8 +85,8 @@ export default function CalendarSection({ navigation }) {
       </View>
       <Text style={[styles.eventCount, { color: theme.textTertiary }]}>
         {userEventCount > 0 
-          ? `${userEventCount} ${userEventCount === 1 ? 'händelse' : 'händelser'}`
-          : 'Inga händelser'}
+          ? `${userEventCount} ${userEventCount === 1 ? t('calendar.event') : t('calendar.events')}`
+          : t('calendar.noEvents')}
       </Text>
       {nextEvent && (
         <Text style={[styles.nextEvent, { color: theme.text }]} numberOfLines={1}>

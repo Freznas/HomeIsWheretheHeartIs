@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { getUserHousehold, subscribeToShoppingList } from '../../config/firebase';
 
 export default function ShoppingListSection({ navigation }) {
   const { theme } = useTheme();
   const { currentUser } = useAuth();
+  const { t } = useLanguage();
   const [items, setItems] = useState([]);
   const [lastItem, setLastItem] = useState(null);
   const [itemCount, setItemCount] = useState(0);
@@ -56,6 +58,8 @@ export default function ShoppingListSection({ navigation }) {
     }
   }, [items]);
 
+  const itemCountDisplay = useMemo(() => itemCount, [itemCount]);
+
   return (
     <TouchableOpacity
       activeOpacity={0.85}
@@ -64,7 +68,7 @@ export default function ShoppingListSection({ navigation }) {
     >
       <View style={styles.header}>
         <Text style={styles.icon}>🛒</Text>
-        <Text style={[styles.title, { color: theme.text }]}>Inköpslista</Text>
+        <Text style={[styles.title, { color: theme.text }]}>{t('home.shoppingList')}</Text>
       </View>
       <View style={styles.content}>
         <Text style={[styles.itemCount, { color: theme.accent }]}>

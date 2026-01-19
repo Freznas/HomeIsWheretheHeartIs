@@ -13,9 +13,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
+import HeaderView from '../../components/common/HeaderView';
 
 export default function WeatherPage({ navigation }) {
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [location, setLocation] = useState(null);
@@ -184,24 +187,11 @@ export default function WeatherPage({ navigation }) {
   const currentWeather = getWeatherInfo(weatherData.current.weather_code);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.headerBackground} />
-
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.headerBackground }]}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={[styles.backIcon, { color: theme.headerText }]}>←</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: theme.headerText }]}>Väder</Text>
-          <Text style={[styles.headerSubtitle, { color: theme.headerText, opacity: 0.8 }]}>
-            {weatherData.location.city || weatherData.location.region || 'Din plats'}
-          </Text>
-        </View>
-        <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
-          <Text style={[styles.refreshIcon, { color: theme.headerText }]}>🔄</Text>
-        </TouchableOpacity>
-      </View>
+    <HeaderView
+      title={t('weather.title')}
+      subtitle={weatherData.location.city || weatherData.location.region || 'Din plats'}
+      navigation={navigation}
+    >
 
       <ScrollView
         style={styles.content}
@@ -276,7 +266,7 @@ export default function WeatherPage({ navigation }) {
           })}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </HeaderView>
   );
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,17 +10,21 @@ import {
   TextInput,
   Platform,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import { getUserHousehold, subscribeToCalendar, addCalendarEvent, updateCalendarEvent, deleteCalendarEvent } from '../../config/firebase';
+import HeaderView from '../../components/common/HeaderView';
 import * as Calendar from 'expo-calendar';
 
 export default function CalendarPage({ navigation }) {
   const { theme } = useTheme();
   const { currentUser } = useAuth();
+  const { t } = useLanguage();
   const { scheduleEventReminder, cancelNotification } = useNotifications();
   
   // 🔥 Firebase state - realtidsuppdatering
@@ -79,6 +83,7 @@ export default function CalendarPage({ navigation }) {
         }
       } catch (error) {
         console.error('Error loading household:', error);
+        Alert.alert('Fel', 'Kunde inte ladda hushållsinformation');
         setLoading(false);
       }
     };
@@ -222,6 +227,7 @@ export default function CalendarPage({ navigation }) {
       setPhoneCalendars(calendars);
     } catch (error) {
       console.error('Fel vid laddning av kalendrar:', error);
+      Alert.alert('Fel', 'Kunde inte ladda telefonens kalendrar');
     }
   };
 
@@ -300,13 +306,19 @@ export default function CalendarPage({ navigation }) {
   };
 
   // Formatera månadsnamn
-  const getMonthName = (date) => {
+  const getMonthName = useCallback((date) => {
     const months = [
       "Januari", "Februari", "Mars", "April", "Maj", "Juni",
       "Juli", "Augusti", "September", "Oktober", "November", "December"
     ];
     return months[date.getMonth()];
-  };
+  }, []);
+
+  const calendarDays = useMemo(() => generateCalendarDays(), [currentDate, events]);
+  const selectedDateEvents = useMemo(() => 
+    selectedDate ? getEventsForDate(selectedDate) : [],
+    [selectedDate, events]
+  );
 
   // Visa laddningsstatus
   if (loading) {
@@ -317,39 +329,17 @@ export default function CalendarPage({ navigation }) {
     );
   }
 
-  const calendarDays = generateCalendarDays();
-  const selectedDateEvents = selectedDate ? getEventsForDate(selectedDate) : [];
-
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.headerBackground} />
-      
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.headerBackground }]}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={[styles.backIcon, { color: theme.headerText }]}>←</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: theme.headerText }]}>Kalender</Text>
-          <Text style={[styles.headerSubtitle, { color: theme.headerText, opacity: 0.8 }]}>
-            {syncEnabled ? '📱 Synkad' : 'Familjeplanering'}
-          </Text>
+    <HeaderView
+      title={t('calendar.title')}
+      navigation={navigation}
+    >
+      {loading ? (
+        <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>{t('common.loading')}</Text>
         </View>
-        <TouchableOpacity 
-          style={styles.addButton}
-          onPress={() => {
-            if (selectedDate) {
-              setModalVisible(true);
-            }
-          }}
-        >
-          <Text style={styles.addIcon}>+</Text>
-        </TouchableOpacity>
-      </View>
-
+      ) : (
       <ScrollView style={[styles.content, { backgroundColor: theme.background }]}>
         {/* Synkroniseringsknapp */}
         <TouchableOpacity 
@@ -502,6 +492,7 @@ export default function CalendarPage({ navigation }) {
           </View>
         )}
       </ScrollView>
+      )}
 
       {/* Modal för ny händelse */}
       <Modal
@@ -632,17 +623,17 @@ export default function CalendarPage({ navigation }) {
 
               <View style={styles.buttonContainer}>
                 <TouchableOpacity style={[styles.cancelButton, { borderColor: theme.border }]} onPress={() => setModalVisible(false)}>
-                  <Text style={[styles.cancelButtonText, { color: theme.text }]}>Avbryt</Text>
+                  <Text style={[styles.cancelButtonText, { color: theme.text }]}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.success }]} onPress={addEvent}>
-                  <Text style={[styles.saveButtonText, { color: theme.textInverse }]}>Spara</Text>
+                  <Text style={[styles.saveButtonText, { color: theme.textInverse }]}>{t('common.save')}</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </HeaderView>
   );
 }
 

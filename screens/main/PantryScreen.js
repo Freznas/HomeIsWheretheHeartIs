@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { 
   View, 
   Text, 
@@ -11,23 +11,30 @@ import {
   Platform,
   StatusBar,
   ScrollView,
-  Alert
+  Alert,
+  ActivityIndicator,
+  RefreshControl
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from "@react-native-picker/picker";
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { getUserHousehold, subscribeToPantry, addPantryItem, updatePantryItem, deletePantryItem } from '../../config/firebase';
+import HeaderView from '../../components/common/HeaderView';
+import { SkeletonList, PantryCategorySkeleton } from '../../components/common/SkeletonLoader';
 
 
 export default function PantryPage({ navigation }) {
   const { theme } = useTheme();
   const { currentUser } = useAuth();
+  const { t } = useLanguage();
   
   // 🔥 Firebase state - realtidsuppdatering
   const [pantryItems, setPantryItems] = useState([]);
   const [householdId, setHouseholdId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   
   // Modal states
   const [modalVisible, setModalVisible] = useState(false);
@@ -67,6 +74,12 @@ export default function PantryPage({ navigation }) {
 
     return () => unsubscribe();
   }, [householdId]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    // Firebase realtidsuppdatering sköter refresh automatiskt
+    setTimeout(() => setRefreshing(false), 500);
+  }, []);
 
   const loadHouseholdAndPantry = async () => {
     if (!currentUser?.id) {
@@ -197,14 +210,16 @@ export default function PantryPage({ navigation }) {
     }
   };
   // Gruppera items per kategori från AsyncStorage data
-  const groupedPantry = (pantryItems || []).reduce((acc, item) => {
-    const category = item.category || "Okategoriserat";
-    if (!acc[category]) {
-      acc[category] = [];
-    }
-    acc[category].push(item);
-    return acc;
-  }, {});
+  const groupedPantry = useMemo(() => {
+    return (pantryItems || []).reduce((acc, item) => {
+      const category = item.category || "Okategoriserat";
+      if (!acc[category]) {
+        acc[category] = [];
+      }
+      acc[category].push(item);
+      return acc;
+    }, {});
+  }, [pantryItems]);
 
  if (loading) {
     return (
@@ -397,34 +412,30 @@ export default function PantryPage({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.headerBackground} />
-      
-      {/* Modern Header */}
-      <View style={[styles.header, { backgroundColor: theme.headerBackground }]}>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={[styles.backIcon, { color: theme.headerText }]}>←</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: theme.headerText }]}>Skafferi</Text>
-          <Text style={[styles.headerSubtitle, { color: theme.headerText, opacity: 0.8 }]}>{(pantryItems || []).length} varor totalt</Text>
-        </View>
-        <TouchableOpacity style={styles.addHeaderButton} onPress={openAddModal}>
-          <Text style={styles.addHeaderIcon}>+</Text>
-        </TouchableOpacity>
-      </View>
+    <HeaderView
+      title={t('pantry.title')}
+      subtitle={`${(pantryItems || []).length} varor totalt`}
+      navigation={navigation}
+    >
 
       <View style={[styles.container, { backgroundColor: theme.background }]}>
-        {Object.keys(groupedPantry).length > 0 ? (
+        {loading ? (
+          <SkeletonList count={3} CardComponent={PantryCategorySkeleton} />
+        ) : Object.keys(groupedPantry).length > 0 ? (
           <FlatList
             data={Object.keys(groupedPantry)}
             keyExtractor={item => item}
             renderItem={renderCategory}
             contentContainerStyle={styles.listContainer}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[theme.primary]}
+                tintColor={theme.primary}
+              />
+            }
           />
         ) : (
           <View style={styles.emptyContainer}>
@@ -437,7 +448,7 @@ export default function PantryPage({ navigation }) {
         )}
         
         <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
-          <Text style={styles.addButtonText}>+ Lägg till vara</Text>
+          <Text style={styles.addButtonText}>+ {t('pantry.add')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -455,7 +466,7 @@ export default function PantryPage({ navigation }) {
           <View style={[styles.modalContent, { backgroundColor: theme.modalBackground }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: theme.text }]}>
-                {editingItem ? "Redigera vara" : "Lägg till vara"}
+                {editingItem ? t('pantry.edit') : t('pantry.add')}
               </Text>
               <TouchableOpacity onPress={resetModal} style={styles.closeButton}>
                 <Text style={[styles.closeButtonText, { color: theme.text }]}>×</Text>
@@ -574,7 +585,7 @@ export default function PantryPage({ navigation }) {
                 onPress={handleSave}
               >
                 <Text style={[styles.saveButtonText, { color: theme.textInverse }]}>
-                  {editingItem ? "Uppdatera" : "Lägg till"}
+                  {editingItem ? t('common.edit') : t('common.add')}
                 </Text>
               </TouchableOpacity>
               
@@ -583,7 +594,7 @@ export default function PantryPage({ navigation }) {
                   style={[styles.actionButton, styles.deleteButton, { backgroundColor: theme.error }]} 
                   onPress={handleDelete}
                 >
-                  <Text style={[styles.deleteButtonText, { color: theme.textInverse }]}>Ta bort</Text>
+                  <Text style={[styles.deleteButtonText, { color: theme.textInverse }]}>{t('common.delete')}</Text>
                 </TouchableOpacity>
               )}
               
@@ -591,13 +602,13 @@ export default function PantryPage({ navigation }) {
                 style={[styles.actionButton, styles.cancelButton, { borderColor: theme.border }]} 
                 onPress={resetModal}
               >
-                <Text style={[styles.cancelButtonText, { color: theme.text }]}>Avbryt</Text>
+                <Text style={[styles.cancelButtonText, { color: theme.text }]}>{t('common.cancel')}</Text>
               </TouchableOpacity>
             </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </SafeAreaView>
+    </HeaderView>
   );
 }
 
@@ -605,6 +616,15 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: "#f8f9fa",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
   },
   header: {
     backgroundColor: "#3949ab",

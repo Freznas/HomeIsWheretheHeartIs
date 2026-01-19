@@ -1,20 +1,24 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert } from "react-native";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert, RefreshControl } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { getUserHousehold, subscribeToBills, addBill, updateBill, deleteBill } from '../../config/firebase';
 import HeaderView from '../../components/common/HeaderView';
+import { SkeletonList, BillItemSkeleton } from '../../components/common/SkeletonLoader';
 
 export default function BillsPage({ navigation }) {
   const { theme } = useTheme();
   const { currentUser } = useAuth();
+  const { t } = useLanguage();
   
   // 🔥 Firebase state - realtidsuppdatering
   const [bills, setBills] = useState([]);
   const [householdId, setHouseholdId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   
   const [modalVisible, setModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -55,6 +59,7 @@ export default function BillsPage({ navigation }) {
         }
       } catch (error) {
         console.error('Error loading household:', error);
+        Alert.alert('Fel', 'Kunde inte ladda hushållsinformation');
         setLoading(false);
       }
     };
@@ -65,8 +70,12 @@ export default function BillsPage({ navigation }) {
       if (unsubscribe) unsubscribe();
     };
   }, [currentUser]);
-
-  const renderItem = ({ item }) => (
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    // Firebase realtidsuppdatering sköter refresh automatiskt
+    setTimeout(() => setRefreshing(false), 500);
+  }, []);
+  const renderItem = useCallback(({ item }) => (
     <TouchableOpacity 
       style={[styles.itemCard, { backgroundColor: theme.cardBackground, shadowColor: theme.shadowColor, borderColor: theme.border }]} 
       onPress={() => openEditModal(item)}
@@ -77,7 +86,7 @@ export default function BillsPage({ navigation }) {
         Belopp: {item.amount} kr • Förfallodatum: {item.dueDate} • Status: {item.status}
       </Text>
     </TouchableOpacity>
-  );
+  ), [theme, openEditModal]);
 
   const openEditModal = (item) => {
     setEditingItem(item);
@@ -217,21 +226,35 @@ export default function BillsPage({ navigation }) {
 
   return (
     <HeaderView
-      title="Räkningar"
+      title={t('bills.title')}
       onBackPress={() => navigation.goBack()}
       onProfilePress={() => navigation.navigate('Profile')}
       onSupportPress={() => navigation.navigate('Support')}
     >
       <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {loading ? (
+          <SkeletonList count={5} CardComponent={BillItemSkeleton} />
+        ) : (
+          <>
         <FlatList
           data={bills}
           keyExtractor={item => item.id}
           renderItem={renderItem}
           contentContainerStyle={{ paddingBottom: 24 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[theme.primary]}
+              tintColor={theme.primary}
+            />
+          }
         />
         <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
-          <Text style={styles.addButtonText}>+ Lägg till räkning</Text>
+          <Text style={styles.addButtonText}>+ {t('bills.add')}</Text>
         </TouchableOpacity>
+          </>
+        )}
         <Modal
           visible={modalVisible}
           transparent
@@ -244,7 +267,7 @@ export default function BillsPage({ navigation }) {
           >
             <View style={[styles.modalContent, { backgroundColor: theme.modalBackground }]}>
               <Text style={[styles.modalTitle, { color: theme.text }]}>
-                {editingItem ? "Redigera räkning" : "Lägg till räkning"}
+                {editingItem ? t('bills.edit') : t('bills.add')}
               </Text>
               
               <TextInput
@@ -325,16 +348,16 @@ export default function BillsPage({ navigation }) {
               <View style={styles.modalButtons}>
                 <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.success }]} onPress={handleSave}>
                   <Text style={[styles.modalButtonText, { color: theme.textInverse }]}>
-                    {editingItem ? "Uppdatera" : "Lägg till"}
+                    {editingItem ? t('common.edit') : t('common.add')}
                   </Text>
                 </TouchableOpacity>
                 {editingItem && (
                   <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.error }]} onPress={handleDelete}>
-                    <Text style={[styles.modalButtonText, { color: theme.textInverse }]}>Ta bort</Text>
+                    <Text style={[styles.modalButtonText, { color: theme.textInverse }]}>{t('common.delete')}</Text>
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.cardBackground, borderColor: theme.border, borderWidth: 1 }]} onPress={() => { setModalVisible(false); setErrors({}); }}>
-                  <Text style={[styles.modalButtonText, { color: theme.text }]}>Avbryt</Text>
+                  <Text style={[styles.modalButtonText, { color: theme.text }]}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
               </View>
             </View>

@@ -13,9 +13,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCommunicationData } from '../../hooks/useAsyncStorage';
 import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
+import HeaderView from '../../components/common/HeaderView';
 
 export default function CommunicationPage({ navigation }) {
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const [conversation, setConversation, removeCommunicationData, loading] = useCommunicationData();
   const [input, setInput] = useState("");
 
@@ -49,22 +52,11 @@ export default function CommunicationPage({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.headerBackground} />
-      
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.headerBackground }]}>
-        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-          <Text style={[styles.backIcon, { color: theme.headerText }]}>←</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: theme.headerText }]}>Familjekonversation</Text>
-          <Text style={[styles.headerSubtitle, { color: theme.headerText, opacity: 0.8 }]}>Anna, Erik, Du</Text>
-        </View>
-        <TouchableOpacity style={styles.optionsButton}>
-          <Text style={styles.optionsIcon}>⋮</Text>
-        </TouchableOpacity>
-      </View>
+    <HeaderView
+      title={t('chat.title')}
+      subtitle="Anna, Erik, Du"
+      navigation={navigation}
+    >
 
       {/* Messages */}
       <ScrollView 
@@ -129,7 +121,7 @@ export default function CommunicationPage({ navigation }) {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </HeaderView>
   );
 }
 

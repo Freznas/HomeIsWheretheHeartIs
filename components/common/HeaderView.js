@@ -2,18 +2,19 @@ import React from "react";
 import { View, Text, ScrollView, StatusBar, Platform, TouchableOpacity } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 import styles from "./Header.Styles"
 const HeaderView = ({ 
   style, 
   contentContainerStyle, 
   children, 
-  onBackPress, 
-  onProfilePress,
-  onSupportPress, 
-  title = "Mitt Hushåll" // standardtitel
+  navigation,
+  title = "Mitt Hushåll",
+  rightButtons
 }) => {
   const { theme, isDarkMode, toggleTheme } = useTheme();
+  const { language, toggleLanguage } = useLanguage();
   
   // SafeArea + Android-statusbar
   const safeAreaStyle = [
@@ -32,16 +33,16 @@ const HeaderView = ({
       {/* Header */}
       <View style={[styles.container, { backgroundColor: theme.headerBackground }]}>
         {/* Back-knapp vänster */}
-        {onBackPress && (
+        {navigation && (
           <TouchableOpacity 
             style={[styles.backButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]} 
-            onPress={onBackPress}
+            onPress={() => navigation.goBack()}
           >
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
         )}
 
-        {/* Support och Profilikon höger */}
+        {/* Tema, Språk, Support och Profilikon höger */}
         <View style={styles.rightButtons}>
           <TouchableOpacity 
             style={[styles.themeButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]} 
@@ -49,22 +50,29 @@ const HeaderView = ({
           >
             <Text style={styles.themeIcon}>{isDarkMode ? '☀️' : '🌙'}</Text>
           </TouchableOpacity>
-          {onSupportPress && (
+          <TouchableOpacity 
+            style={[styles.languageButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]} 
+            onPress={toggleLanguage}
+          >
+            <Text style={styles.languageIcon}>{language === 'sv' ? '🇬🇧' : '🇸🇪'}</Text>
+          </TouchableOpacity>
+          {navigation && (
             <TouchableOpacity 
               style={[styles.supportButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]} 
-              onPress={onSupportPress}
+              onPress={() => navigation.navigate('SupportPage')}
             >
               <Text style={styles.supportIcon}>❓</Text>
             </TouchableOpacity>
           )}
-          {onProfilePress && (
+          {navigation && (
             <TouchableOpacity 
               style={[styles.profileButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]} 
-              onPress={onProfilePress}
+              onPress={() => navigation.navigate('Profile')}
             >
               <Text style={styles.profileIcon}>👤</Text>
             </TouchableOpacity>
           )}
+          {rightButtons}
         </View>
         
         {/* Titel och greeting */}
@@ -75,10 +83,8 @@ const HeaderView = ({
         </View>
       </View>
 
-      {/* Scrollable content */}
-      <ScrollView contentContainerStyle={[styles.scroll, contentContainerStyle]}>
-        {children}
-      </ScrollView>
+      {/* Content without ScrollView - let each screen handle its own scrolling */}
+      {children}
     </SafeAreaView>
   );
 };

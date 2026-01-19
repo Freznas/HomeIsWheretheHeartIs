@@ -1,10 +1,12 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
 import HeaderView from '../../components/common/HeaderView';
 
 export default function SupportScreen({ navigation }) {
   const { theme } = useTheme();
+  const { t } = useLanguage();
 
   const openEmail = () => {
     Linking.openURL('mailto:hearthishome120@gmail.com?subject=App Feedback');
@@ -12,43 +14,37 @@ export default function SupportScreen({ navigation }) {
 
   return (
     <HeaderView
-      title="Support & Info"
+      title={t('support.title')}
       onBackPress={() => navigation.goBack()}
       onProfilePress={() => navigation.navigate('Profile')}
       onSupportPress={() => navigation.navigate('Support')}
     >
       <View style={styles.header}>
         <Text style={styles.icon}>🏠</Text>
-        <Text style={[styles.title, { color: theme.text }]}>Home Is Where The Heart Is</Text>
-        <Text style={[styles.version, { color: theme.textSecondary }]}>Version 1.0.0 (Beta)</Text>
+        <Text style={[styles.title, { color: theme.text }]}>{t('support.appName')}</Text>
+        <Text style={[styles.version, { color: theme.textSecondary }]}>{t('support.version')}</Text>
       </View>
 
-        <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
-          <Text style={[styles.cardTitle, { color: theme.text }]}>🚧 App Under Utveckling</Text>
-          <Text style={[styles.cardText, { color: theme.textSecondary }]}>
-            Denna app är fortfarande under aktiv utveckling. Vi jobbar kontinuerligt med att förbättra 
-            funktionalitet, fixa buggar och lägga till nya funktioner för att göra din hushållshantering 
-            så smidig som möjligt.
-          </Text>
-        </View>
+      <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+        <Text style={[styles.cardTitle, { color: theme.text }]}>🚧 {t('support.inDevelopment')}</Text>
+        <Text style={[styles.cardText, { color: theme.textSecondary }]}>
+          {t('support.inDevText')}
+        </Text>
+      </View>
 
-        <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
-          <Text style={[styles.cardTitle, { color: theme.text }]}>💬 Din Feedback Uppskattas</Text>
-          <Text style={[styles.cardText, { color: theme.textSecondary }]}>
-            Vi värdesätter din åsikt! Om du stöter på problem, har förslag på förbättringar eller vill 
-            dela dina tankar om appen, tveka inte att kontakta oss. Din feedback hjälper oss att göra 
-            appen bättre.
-          </Text>
-          <TouchableOpacity 
-            style={[styles.button, { backgroundColor: theme.primary }]}
-            onPress={openEmail}
-          >
-            <Text style={styles.buttonText}>📧 Skicka Feedback</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
-          <Text style={[styles.cardTitle, { color: theme.text }]}>✨ Funktioner</Text>
+      <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+        <Text style={[styles.cardTitle, { color: theme.text }]}>💬 {t('support.feedback')}</Text>
+        <Text style={[styles.cardText, { color: theme.textSecondary }]}>
+          {t('support.feedbackText')}
+        </Text>
+        <TouchableOpacity 
+          style={[styles.button, { backgroundColor: theme.primary }]}
+          onPress={openEmail}
+        >
+          <Text style={styles.buttonText}>📧 {t('support.sendFeedback')}</Text>
+        </TouchableOpacity>
+      </View>      <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+        <Text style={[styles.cardTitle, { color: theme.text }]}>✨ {t('support.features')}</Text>
           <View style={styles.featureList}>
             <Text style={[styles.featureItem, { color: theme.textSecondary }]}>• Hantera hushållssysslor och dela uppgifter</Text>
             <Text style={[styles.featureItem, { color: theme.textSecondary }]}>• Dela shoppinglistor och pantryvaror</Text>
@@ -60,8 +56,8 @@ export default function SupportScreen({ navigation }) {
           </View>
         </View>
 
-        <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
-          <Text style={[styles.cardTitle, { color: theme.text }]}>📝 Kommande Funktioner</Text>
+      <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+        <Text style={[styles.cardTitle, { color: theme.text }]}>📝 {t('support.upcomingFeatures')}</Text>
           <View style={styles.featureList}>
             <Text style={[styles.featureItem, { color: theme.textSecondary }]}>• Personliga anteckningar</Text>
             <Text style={[styles.featureItem, { color: theme.textSecondary }]}>• Push-notifikationer för påminnelser</Text>

@@ -14,17 +14,19 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function LoginScreen({ navigation }) {
   const { theme } = useTheme();
   const { login, loginWithGoogle, googleAuthRequest } = useAuth();
+  const { t } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Fält saknas', 'Fyll i både email och lösenord');
+      Alert.alert(t('error.fieldsMissing'), t('error.fillRequired'));
       return;
     }
 
@@ -33,7 +35,7 @@ export default function LoginScreen({ navigation }) {
     setLoading(false);
 
     if (!result.success) {
-      Alert.alert('Inloggning misslyckades', result.error);
+      Alert.alert(t('error.registrationFailed'), result.error);
     }
   };
   
@@ -81,7 +83,7 @@ export default function LoginScreen({ navigation }) {
                     borderColor: theme.border,
                   },
                 ]}
-                placeholder="din@email.com"
+                placeholder={t('placeholder.email')}
                 placeholderTextColor={theme.textTertiary}
                 value={email}
                 onChangeText={setEmail}
@@ -102,7 +104,7 @@ export default function LoginScreen({ navigation }) {
                     borderColor: theme.border,
                   },
                 ]}
-                placeholder="••••••••"
+                placeholder={t('placeholder.password')}
                 placeholderTextColor={theme.textTertiary}
                 value={password}
                 onChangeText={setPassword}

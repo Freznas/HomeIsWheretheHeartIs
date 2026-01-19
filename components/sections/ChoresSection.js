@@ -1,13 +1,46 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useTheme } from '../../context/ThemeContext';
-import { useChoresData } from '../../hooks/useAsyncStorage';
+import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
+import { getUserHousehold, subscribeToChores } from '../../config/firebase';
 
 export default function ChoresSection({ navigation }) {
   const { theme } = useTheme();
-  const [chores] = useChoresData();
+  const { currentUser } = useAuth();
+  const { t } = useLanguage();
+  const [chores, setChores] = useState([]);
   const [nextChore, setNextChore] = useState(null);
   const [choreCount, setChoreCount] = useState(0);
+
+  // 🔥 Firebase - Hämta hushålls-ID och prenumerera på sysslor
+  useEffect(() => {
+    let unsubscribe;
+
+    const loadData = async () => {
+      if (!currentUser?.id) return;
+
+      try {
+        const result = await getUserHousehold(currentUser.id);
+        
+        if (result.success && result.householdId) {
+          unsubscribe = subscribeToChores(result.householdId, (response) => {
+            if (response.success) {
+              setChores(response.chores || []);
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error loading chores:', error);
+      }
+    };
+
+    loadData();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [currentUser]);
 
   useEffect(() => {
     if (chores && chores.length > 0) {
@@ -41,18 +74,18 @@ export default function ChoresSection({ navigation }) {
     >
       <View style={styles.header}>
         <Text style={styles.icon}>✓</Text>
-        <Text style={[styles.title, { color: theme.text }]}>Sysslor</Text>
+        <Text style={[styles.title, { color: theme.text }]}>{t('home.chores')}</Text>
       </View>
       <View style={styles.content}>
         <Text style={[styles.itemCount, { color: theme.success }]}>
-          {choreCount} {choreCount === 1 ? 'uppgift' : 'uppgifter'}
+          {choreCount} {choreCount === 1 ? t('chores.task') : t('chores.tasks')}
         </Text>
         <Text style={[styles.progress, { color: theme.textSecondary }]}>
-          {nextChore ? `Nästa: ${nextChore.task}` : 'Inga aktiva sysslor'}
+          {nextChore ? `${t('chores.next')} ${nextChore.task}` : t('chores.noActive')}
         </Text>
       </View>
       <View style={[styles.statusBadge, { backgroundColor: theme.success + '20' }]}>
-        <Text style={[styles.statusText, { color: theme.success }]}>Pågår</Text>
+        <Text style={[styles.statusText, { color: theme.success }]}>{t('chores.ongoing')}</Text>
       </View>
     </TouchableOpacity>
   );

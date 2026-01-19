@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 const AVATARS = ['👤', '👨', '👩', '🧑', '👦', '👧', '👨‍💼', '👩‍💼', '👨‍🍳', '👩‍🍳', '👨‍🌾', '👩‍🌾'];
 const ROLES = [
@@ -24,6 +25,7 @@ const ROLES = [
 export default function RegisterScreen({ navigation }) {
   const { theme } = useTheme();
   const { register, loginWithGoogle, googleAuthRequest } = useAuth();
+  const { t } = useLanguage();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -43,17 +45,17 @@ export default function RegisterScreen({ navigation }) {
   const handleRegister = async () => {
     // Validering
     if (!formData.name.trim() || !formData.email.trim() || !formData.password.trim()) {
-      Alert.alert('Fält saknas', 'Fyll i alla obligatoriska fält');
+      Alert.alert(t('error.fieldsMissing'), t('error.fillRequired'));
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      Alert.alert('Lösenord matchar inte', 'Kontrollera att båda lösenorden är samma');
+      Alert.alert(t('error.passwordMismatch'), t('error.passwordMatch'));
       return;
     }
 
     if (formData.password.length < 4) {
-      Alert.alert('Svagt lösenord', 'Lösenordet måste vara minst 4 tecken');
+      Alert.alert(t('error.weakPassword'), t('error.passwordMinLength'));
       return;
     }
 
@@ -74,7 +76,12 @@ export default function RegisterScreen({ navigation }) {
     setCodeExpiry(expiry);
     
     try {
-      const API_URL = __DEV__ ? 'http://172.20.10.4:3000' : 'https://your-api.com';
+      const API_URL = process.env.EXPO_PUBLIC_API_URL;
+      
+      if (!API_URL) {
+        Alert.alert('Konfigurationsfel', 'API URL är inte konfigurerad. Kontakta support.');
+        return;
+      }
       
       const response = await fetch(`${API_URL}/api/auth/send-2fa-code`, {
         method: 'POST',
@@ -146,7 +153,13 @@ export default function RegisterScreen({ navigation }) {
       return;
     }
     
-    // Kod verifierad och konto skapat - navigera till hushållsinställning
+    // Kod verifierad och konto skapat - visa meddelande om email-verifiering
+    Alert.alert(
+      'Konto skapat! ✅',
+      result.message || 'Kontrollera din email för att verifiera ditt konto innan du skapar ett hushåll.',
+      [{ text: 'OK' }]
+    );
+    
     setShowVerificationModal(false);
     navigation.replace('HouseholdSetupScreen', {
       userId: result.user?.id,
@@ -230,7 +243,7 @@ export default function RegisterScreen({ navigation }) {
                     borderColor: theme.border,
                   },
                 ]}
-                placeholder="Ditt namn"
+                placeholder={t('placeholder.yourName')}
                 placeholderTextColor={theme.textTertiary}
                 value={formData.name}
                 onChangeText={(text) => setFormData({ ...formData, name: text })}
@@ -248,7 +261,7 @@ export default function RegisterScreen({ navigation }) {
                     borderColor: theme.border,
                   },
                 ]}
-                placeholder="din@email.com"
+                placeholder={t('placeholder.email')}
                 placeholderTextColor={theme.textTertiary}
                 value={formData.email}
                 onChangeText={(text) => setFormData({ ...formData, email: text })}
@@ -269,7 +282,7 @@ export default function RegisterScreen({ navigation }) {
                     borderColor: theme.border,
                   },
                 ]}
-                placeholder="Minst 4 tecken"
+                placeholder={t('placeholder.minChars')}
                 placeholderTextColor={theme.textTertiary}
                 value={formData.password}
                 onChangeText={(text) => setFormData({ ...formData, password: text })}
@@ -288,7 +301,7 @@ export default function RegisterScreen({ navigation }) {
                     borderColor: theme.border,
                   },
                 ]}
-                placeholder="Skriv lösenordet igen"
+                placeholder={t('placeholder.reenterPassword')}
                 placeholderTextColor={theme.textTertiary}
                 value={formData.confirmPassword}
                 onChangeText={(text) => setFormData({ ...formData, confirmPassword: text })}
@@ -384,7 +397,7 @@ export default function RegisterScreen({ navigation }) {
                   borderColor: verificationError ? theme.error : theme.border,
                 },
               ]}
-              placeholder="000000"
+              placeholder={t('placeholder.inviteCode')}
               placeholderTextColor={theme.textTertiary}
               value={verificationCode}
               onChangeText={(text) => {
