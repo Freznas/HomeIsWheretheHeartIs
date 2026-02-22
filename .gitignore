@@ -35,7 +35,6 @@ yarn-error.*
 .env
 
 # Sensitive config files
-config/firebase.js
 backend/.env
 
 # typescript
