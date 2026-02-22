@@ -2,22 +2,43 @@ import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
-import { useNotesData } from '../../hooks/useAsyncStorage';
+import { useAuth } from '../../context/AuthContext';
+import { getUserHousehold, subscribeToNotes } from '../../config/firebase';
 
 export default function NotesSection({ navigation }) {
   const { theme } = useTheme();
   const { t } = useLanguage();
-  const [notes] = useNotesData();
+  const { currentUser } = useAuth();
+  const [notes, setNotes] = useState([]);
   const [noteCount, setNoteCount] = useState(0);
 
   useEffect(() => {
-    if (notes && notes.length > 0) {
-      // Räkna totalt antal anteckningar
-      setNoteCount(notes.length);
-    } else {
-      setNoteCount(0);
-    }
-  }, [notes]);
+    let unsubscribe = null;
+
+    const loadNotes = async () => {
+      if (!currentUser?.id) return;
+
+      try {
+        const result = await getUserHousehold(currentUser.id);
+        if (result.success && result.householdId) {
+          unsubscribe = subscribeToNotes(result.householdId, (response) => {
+            if (response.success) {
+              setNotes(response.notes || []);
+              setNoteCount(response.notes?.length || 0);
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error loading notes:', error);
+      }
+    };
+
+    loadNotes();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [currentUser]);
 
   return (
     <TouchableOpacity

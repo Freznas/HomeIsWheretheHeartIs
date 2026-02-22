@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useToast } from '../../context/ToastContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import { getUserHousehold, subscribeToCalendar, addCalendarEvent, updateCalendarEvent, deleteCalendarEvent } from '../../config/firebase';
 import HeaderView from '../../components/common/HeaderView';
@@ -25,7 +26,8 @@ export default function CalendarPage({ navigation }) {
   const { theme } = useTheme();
   const { currentUser } = useAuth();
   const { t } = useLanguage();
-  const { scheduleEventReminder, cancelNotification } = useNotifications();
+  const toast = useToast();
+  const { scheduleEventReminder, cancelNotification, sendPushToHousehold } = useNotifications();
   
   // 🔥 Firebase state - realtidsuppdatering
   const [events, setEvents] = useState([]);
@@ -70,9 +72,8 @@ export default function CalendarPage({ navigation }) {
           // Prenumerera på realtidsuppdateringar
           unsubscribe = subscribeToCalendar(result.householdId, (response) => {
             if (response.success) {
-              // Filtrera endast användarskapade händelser (inte telefon-synkade)
-              const userEvents = (response.events || []).filter(e => e.isFromPhone !== true);
-              setEvents(userEvents);
+              // Visa alla händelser (både användarskapade och telefon-synkade)
+              setEvents(response.events || []);
             } else {
               console.error('Error subscribing to calendar:', response.error);
             }
@@ -163,10 +164,15 @@ export default function CalendarPage({ navigation }) {
       if (result.success) {
         // Schemalägg notifikation för eventet
         const eventWithId = { ...eventData, id: `event_${Date.now()}` };
-        const notificationId = await scheduleEventReminder(eventWithId);
-        if (notificationId) {
-          console.log(`Notifikation schemalagd för: ${eventData.title}`);
-        }
+        await scheduleEventReminder(eventWithId);
+        
+        // 🔔 Send push notification to household
+        await sendPushToHousehold({
+          title: '📅 Ny händelse i kalendern',
+          body: `${currentUser.displayName || 'Någon'} skapade: ${newTitle.trim()} - ${selectedDate} ${timeString}`,
+          data: { type: 'calendar', screen: 'CalendarPage' },
+          excludeUserId: currentUser.id,
+        });
         
         setNewTitle("");
         setNewTime("");
@@ -195,7 +201,6 @@ export default function CalendarPage({ navigation }) {
     // Avboka notifikation om det finns en
     if (eventToDelete?.notificationId) {
       await cancelNotification(eventToDelete.notificationId);
-      console.log(`Notifikation avbokad för: ${eventToDelete.title}`);
     }
     
     try {
@@ -245,8 +250,11 @@ export default function CalendarPage({ navigation }) {
               const { status } = await Calendar.requestCalendarPermissionsAsync();
               if (status === 'granted') {
                 setCalendarPermission(true);
-                loadPhoneCalendars();
-                syncWithPhoneCalendar();
+                await loadPhoneCalendars();
+                // Vänta lite så kalendrarna hinner laddas
+                setTimeout(() => syncWithPhoneCalendar(), 500);
+              } else {
+                Alert.alert('Permission nekad', 'Kan inte synkronisera utan kalenderåtkomst');
               }
             }
           }
@@ -256,14 +264,25 @@ export default function CalendarPage({ navigation }) {
     }
 
     if (!householdId) {
-      Alert.alert('Fel', 'Inget hushåll hittat');
+      toast.error('Inget hushåll hittat');
+      return;
+    }
+
+    if (phoneCalendars.length === 0) {
+      Alert.alert(
+        'Inga kalendrar hittades',
+        'Kunde inte hitta några kalendrar på din telefon. Kontrollera att du har en aktiv kalender.',
+        [{ text: 'OK' }]
+      );
       return;
     }
 
     try {
-      // Hämta händelser från telefonen för aktuell månad
-      const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-      const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+      toast.info('Synkroniserar...');
+      
+      // Hämta händelser från telefonen för aktuell månad och nästa
+      const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+      const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 2, 0);
       
       const phoneEvents = await Calendar.getEventsAsync(
         phoneCalendars.map(cal => cal.id),
@@ -271,37 +290,63 @@ export default function CalendarPage({ navigation }) {
         endDate
       );
 
-      console.log(`Synkar ${phoneEvents.length} händelser från telefon...`);
+      if (!phoneEvents || phoneEvents.length === 0) {
+        Alert.alert(
+          'Inga händelser hittades',
+          `Din telefonkalender har inga händelser mellan ${startDate.toLocaleDateString('sv-SE')} och ${endDate.toLocaleDateString('sv-SE')}.`,
+          [{ text: 'OK' }]
+        );
+        return;
+      }
 
       // Hämta befintliga händelser från Firebase för att undvika dubbletter
       const existingPhoneEventIds = events
-        .filter(e => e.isFromPhone && e.id.startsWith('phone-'))
-        .map(e => e.id);
+        .filter(e => e.isFromPhone && e.phoneEventId)
+        .map(e => e.phoneEventId);
 
       // Konvertera telefon-händelser till appens format och filtrera bort dubbletter
       const convertedEvents = phoneEvents
-        .filter(event => !existingPhoneEventIds.includes(`phone-${event.id}`))
+        .filter(event => !existingPhoneEventIds.includes(event.id))
         .map(event => ({
-          title: event.title,
-          time: event.startDate ? new Date(event.startDate).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }) : '',
+          title: event.title || 'Ingen titel',
+          time: event.allDay ? 'Heldag' : (event.startDate ? new Date(event.startDate).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }) : ''),
           description: event.notes || '',
           date: new Date(event.startDate).toISOString().split('T')[0],
           isFromPhone: true,
           phoneEventId: event.id, // Spara original-ID för att undvika dubbletter
+          isAllDay: event.allDay || false,
         }));
 
-      console.log(`${convertedEvents.length} nya händelser att lägga till (${phoneEvents.length - convertedEvents.length} dubbletter hoppades över)`);
+      if (convertedEvents.length === 0) {
+        Alert.alert(
+          'Redan synkroniserad',
+          `${phoneEvents.length} händelser hittades men alla är redan synkroniserade.`,
+          [{ text: 'OK' }]
+        );
+        return;
+      }
 
       // Lägg till nya telefon-händelser i Firebase
+      let successCount = 0;
       for (const event of convertedEvents) {
-        await addCalendarEvent(householdId, event, currentUser.id);
+        const result = await addCalendarEvent(householdId, event, currentUser.id);
+        if (result.success) {
+          successCount++;
+        }
       }
 
       setSyncEnabled(true);
-      Alert.alert("Synkronisering klar", `${convertedEvents.length} nya händelser hämtades från din telefon.${phoneEvents.length > convertedEvents.length ? ` (${phoneEvents.length - convertedEvents.length} dubbletter hoppades över)` : ''}`);
+      toast.success(`${successCount} händelser synkroniserade`);
+      Alert.alert(
+        "Synkronisering klar! ✅", 
+        `${successCount} nya händelser hämtades från din telefon.${phoneEvents.length > convertedEvents.length ? `\n\n(${phoneEvents.length - convertedEvents.length} händelser var redan synkroniserade)` : ''}`
+      );
     } catch (error) {
       console.error('Synkroniseringsfel:', error);
-      Alert.alert("Synkroniseringsfel", "Kunde inte hämta händelser från telefonens kalender.");
+      Alert.alert(
+        "Synkroniseringsfel ❌", 
+        `Kunde inte hämta händelser från telefonens kalender.\n\nFel: ${error.message || 'Okänt fel'}`
+      );
     }
   };
 
@@ -319,6 +364,24 @@ export default function CalendarPage({ navigation }) {
     selectedDate ? getEventsForDate(selectedDate) : [],
     [selectedDate, events]
   );
+
+  // Öppna modal för ny händelse
+  const openAddEventModal = () => {
+    if (!selectedDate) {
+      // Om inget datum är valt, välj dagens datum
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+      setSelectedDate(todayStr);
+    }
+    setEditingEvent(null);
+    setNewTitle("");
+    setNewTime("");
+    setNewDescription("");
+    setSelectedHour("09");
+    setSelectedMinute("00");
+    setIsAllDay(false);
+    setModalVisible(true);
+  };
 
   // Visa laddningsstatus
   if (loading) {
@@ -492,6 +555,17 @@ export default function CalendarPage({ navigation }) {
           </View>
         )}
       </ScrollView>
+      )}
+
+      {/* Floating Action Button */}
+      {!loading && (
+        <TouchableOpacity 
+          style={[styles.fab, { backgroundColor: theme.primary }]}
+          onPress={openAddEventModal}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.fabIcon, { color: theme.textInverse }]}>+</Text>
+        </TouchableOpacity>
       )}
 
       {/* Modal för ny händelse */}
@@ -707,6 +781,25 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 24,
     fontWeight: "bold",
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+  },
+  fabIcon: {
+    fontSize: 32,
+    fontWeight: 'bold',
   },
   content: {
     flex: 1,

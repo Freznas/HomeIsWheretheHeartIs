@@ -2,7 +2,8 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getAuth } from 'firebase/auth';
-import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, where, onSnapshot, deleteDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, where, onSnapshot, deleteDoc, updateDoc, serverTimestamp, enableIndexedDbPersistence } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
 // Your web app's Firebase configuration
 // Using environment variables for security
@@ -21,9 +22,21 @@ const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
+
+// 🔥 Enable offline persistence - cachar data lokalt för offline-åtkomst
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code === 'failed-precondition') {
+    // Flera flikar öppna samtidigt, persistence kan bara aktiveras i en flik
+    console.warn('Offline persistence: Flera flikar öppna, endast en kan ha persistence aktiverad');
+  } else if (err.code === 'unimplemented') {
+    // Webbläsaren stöder ej persistence
+    console.warn('Offline persistence: Denna webbläsare stöder inte offline persistence');
+  }
+});
 
 // Export for use in other modules
-export { auth, db };
+export { auth, db, storage };
 
 // ============================================
 // HOUSEHOLD FUNCTIONS
@@ -39,6 +52,15 @@ export { auth, db };
  */
 export const createHousehold = async (householdName, userId, email, displayName = null) => {
   try {
+    // ✅ Kolla email verification
+    const { getAuth } = await import('firebase/auth');
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+    
+    if (!currentUser || !currentUser.emailVerified) {
+      return { success: false, error: 'Du måste verifiera din email innan du kan skapa ett hushåll' };
+    }
+
     const householdId = `household_${Date.now()}`;
     const inviteCode = Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -88,6 +110,15 @@ export const joinHousehold = async (inviteCode, userId, email, displayName = nul
     // Validera input
     if (!userId || !email) {
       return { success: false, error: 'Användar-ID och email krävs' };
+    }
+
+    // ✅ Kolla email verification
+    const { getAuth } = await import('firebase/auth');
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+    
+    if (!currentUser || !currentUser.emailVerified) {
+      return { success: false, error: 'Du måste verifiera din email innan du kan gå med i ett hushåll' };
     }
 
     // Hitta hushåll med matchande inbjudningskod
@@ -199,6 +230,15 @@ export const subscribeToHousehold = (householdId, callback) => {
  */
 export const leaveHousehold = async (householdId, userId) => {
   try {
+    // ✅ Kolla email verification
+    const { getAuth } = await import('firebase/auth');
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+    
+    if (!currentUser || !currentUser.emailVerified) {
+      return { success: false, error: 'Du måste verifiera din email för att utföra denna åtgärd' };
+    }
+
     const householdDoc = await getDoc(doc(db, 'households', householdId));
     
     if (!householdDoc.exists()) {
@@ -236,6 +276,15 @@ export const leaveHousehold = async (householdId, userId) => {
  */
 export const removeMember = async (householdId, memberUserId, adminUserId) => {
   try {
+    // ✅ Kolla email verification
+    const { getAuth } = await import('firebase/auth');
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+    
+    if (!currentUser || !currentUser.emailVerified) {
+      return { success: false, error: 'Du måste verifiera din email för att utföra denna åtgärd' };
+    }
+
     const householdDoc = await getDoc(doc(db, 'households', householdId));
     
     if (!householdDoc.exists()) {
@@ -298,6 +347,112 @@ export const updateHouseholdName = async (householdId, newName, userId) => {
     return { success: true };
   } catch (error) {
     console.error('Error updating household name:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ============================================
+// USER PROFILE FUNCTIONS
+// ============================================
+
+/**
+ * Uppdatera användarprofil
+ * @param {string} userId - ID på användaren
+ * @param {object} updates - Data att uppdatera
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export const updateUserProfile = async (userId, updates) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating user profile:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Hämta användarstatistik från alla hushållsdata
+ * @param {string} userId - ID på användaren
+ * @param {string} householdId - ID på hushållet
+ * @returns {Promise<{success: boolean, stats?: object, error?: string}>}
+ */
+export const getUserStats = async (userId, householdId) => {
+  try {
+    if (!householdId) {
+      return { success: true, stats: { notes: 0, visitors: 0, chores: 0 } };
+    }
+
+    // Räkna anteckningar
+    const notesRef = collection(db, 'householdData', householdId, 'notes');
+    const notesQuery = query(notesRef, where('createdBy', '==', userId));
+    const notesSnapshot = await getDocs(notesQuery);
+    
+    // Räkna besökare
+    const visitorsRef = collection(db, 'householdData', householdId, 'visitors');
+    const visitorsQuery = query(visitorsRef, where('createdBy', '==', userId));
+    const visitorsSnapshot = await getDocs(visitorsQuery);
+    
+    // Räkna sysslor (tilldelade + skapade)
+    const choresRef = collection(db, 'householdData', householdId, 'chores');
+    const choresSnapshot = await getDocs(choresRef);
+    const userChores = choresSnapshot.docs.filter(doc => {
+      const data = doc.data();
+      return data.assignedTo === userId || data.createdBy === userId;
+    });
+
+    return {
+      success: true,
+      stats: {
+        notes: notesSnapshot.size,
+        visitors: visitorsSnapshot.size,
+        chores: userChores.length,
+      }
+    };
+  } catch (error) {
+    console.error('Error getting user stats:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Uppdatera användarens lösenord
+ * @param {string} currentPassword - Nuvarande lösenord
+ * @param {string} newPassword - Nytt lösenord
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export const updateUserPassword = async (currentPassword, newPassword) => {
+  try {
+    const { getAuth, reauthenticateWithCredential, EmailAuthProvider, updatePassword } = await import('firebase/auth');
+    const auth = getAuth();
+    const user = auth.currentUser;
+
+    if (!user || !user.email) {
+      return { success: false, error: 'Ingen användare inloggad' };
+    }
+
+    // Reautenticate user
+    const credential = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+
+    // Update password
+    await updatePassword(user, newPassword);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating password:', error);
+    
+    if (error.code === 'auth/wrong-password') {
+      return { success: false, error: 'Fel nuvarande lösenord' };
+    } else if (error.code === 'auth/weak-password') {
+      return { success: false, error: 'Lösenordet är för svagt' };
+    }
+    
     return { success: false, error: error.message };
   }
 };
@@ -1140,6 +1295,124 @@ export const deleteChatMessage = async (householdId, messageId) => {
     return { success: true };
   } catch (error) {
     console.error('Error deleting chat message:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ============================================
+// NOTES FUNCTIONS
+// ============================================
+
+/**
+ * Hämta alla anteckningar för ett hushåll
+ * @param {string} householdId - ID på hushållet
+ * @returns {Promise<{success: boolean, notes?: Array, error?: string}>}
+ */
+export const getNotes = async (householdId) => {
+  try {
+    const notesRef = collection(db, 'householdData', householdId, 'notes');
+    const snapshot = await getDocs(notesRef);
+    
+    const notes = [];
+    snapshot.forEach((doc) => {
+      notes.push({ id: doc.id, ...doc.data() });
+    });
+
+    return { success: true, notes };
+  } catch (error) {
+    console.error('Error getting notes:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Prenumerera på anteckningar för ett hushåll (real-time updates)
+ * @param {string} householdId - ID på hushållet
+ * @param {function} callback - Callback-funktion som anropas vid uppdateringar
+ * @returns {function} Unsubscribe-funktion
+ */
+export const subscribeToNotes = (householdId, callback) => {
+  const notesRef = collection(db, 'householdData', householdId, 'notes');
+  
+  const unsubscribe = onSnapshot(
+    notesRef,
+    (snapshot) => {
+      const notes = [];
+      snapshot.forEach((doc) => {
+        notes.push({ id: doc.id, ...doc.data() });
+      });
+      callback({ success: true, notes });
+    },
+    (error) => {
+      console.error('Error subscribing to notes:', error);
+      callback({ success: false, error: error.message });
+    }
+  );
+
+  return unsubscribe;
+};
+
+/**
+ * Lägg till en ny anteckning
+ * @param {string} householdId - ID på hushållet
+ * @param {object} note - Anteckning data
+ * @param {string} userId - ID på användaren som skapar anteckningen
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export const addNote = async (householdId, note, userId) => {
+  try {
+    const noteId = `note_${Date.now()}`;
+    await setDoc(doc(db, 'householdData', householdId, 'notes', noteId), {
+      ...note,
+      id: noteId,
+      createdAt: serverTimestamp(),
+      createdBy: userId,
+      updatedAt: serverTimestamp(),
+      updatedBy: userId,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error adding note:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Uppdatera en anteckning
+ * @param {string} householdId - ID på hushållet
+ * @param {string} noteId - ID på anteckningen
+ * @param {object} updates - Data att uppdatera
+ * @param {string} userId - ID på användaren som uppdaterar
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export const updateNote = async (householdId, noteId, updates, userId) => {
+  try {
+    await updateDoc(doc(db, 'householdData', householdId, 'notes', noteId), {
+      ...updates,
+      updatedAt: serverTimestamp(),
+      updatedBy: userId,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating note:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Ta bort en anteckning
+ * @param {string} householdId - ID på hushållet
+ * @param {string} noteId - ID på anteckningen
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export const deleteNote = async (householdId, noteId) => {
+  try {
+    await deleteDoc(doc(db, 'householdData', householdId, 'notes', noteId));
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting note:', error);
     return { success: false, error: error.message };
   }
 };

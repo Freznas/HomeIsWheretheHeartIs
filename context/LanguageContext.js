@@ -40,12 +40,26 @@ export const LanguageProvider = ({ children }) => {
     }
   };
 
+  const changeLanguage = async (newLanguage) => {
+    if (newLanguage === language) return; // Already set
+    if (!['sv', 'en'].includes(newLanguage)) {
+      console.error('Invalid language code:', newLanguage);
+      return;
+    }
+    setLanguage(newLanguage);
+    try {
+      await AsyncStorage.setItem('@app_language', newLanguage);
+    } catch (error) {
+      console.error('Error saving language:', error);
+    }
+  };
+
   const t = (key) => {
     return translations[language]?.[key] || key;
   };
 
   return (
-    <LanguageContext.Provider value={{ language, toggleLanguage, t }}>
+    <LanguageContext.Provider value={{ language, toggleLanguage, changeLanguage, t }}>
       {children}
     </LanguageContext.Provider>
   );

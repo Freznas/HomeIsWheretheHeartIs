@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const sgMail = require('@sendgrid/mail');
+const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 const app = express();
@@ -10,8 +10,14 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Konfigurera SendGrid
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+// Konfigurera Gmail SMTP
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD
+  }
+});
 
 // In-memory storage för koder (i produktion, använd databas!)
 const twoFactorCodes = new Map();
@@ -65,12 +71,11 @@ app.post('/api/auth/send-2fa-code', rateLimit, async (req, res) => {
       used: false
     });
     
-    // Skicka email
-    const msg = {
+    // Skicka email med Gmail SMTP
+    const mailOptions = {
+      from: `Home Is Where The Heart Is <${process.env.GMAIL_USER}>`,
       to: email,
-      from: process.env.SENDGRID_FROM_EMAIL, // Måste vara verifierad i SendGrid
       subject: '🔐 Din tvåfaktorsautentiseringskod',
-      text: `Din verifieringskod är: ${code}\n\nKoden gäller i 5 minuter.\n\nOm du inte begärt denna kod, ignorera detta meddelande.`,
       html: `
         <!DOCTYPE html>
         <html>
@@ -114,7 +119,7 @@ app.post('/api/auth/send-2fa-code', rateLimit, async (req, res) => {
       `
     };
     
-    await sgMail.send(msg);
+    await transporter.sendMail(mailOptions);
     
     console.log(`2FA-kod skickad till ${email} för userId: ${userId}`);
     
@@ -126,13 +131,9 @@ app.post('/api/auth/send-2fa-code', rateLimit, async (req, res) => {
   } catch (error) {
     console.error('Fel vid skickande av 2FA-kod:', error);
     
-    if (error.response) {
-      console.error('SendGrid error:', error.response.body);
-    }
-    
     res.status(500).json({ 
       success: false, 
-      error: 'Kunde inte skicka email. Kontrollera din SendGrid-konfiguration.' 
+      error: 'Kunde inte skicka email. Kontrollera din Gmail-konfiguration.' 
     });
   }
 });
@@ -219,7 +220,8 @@ setInterval(() => {
 
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 2FA Backend server körs på port ${PORT}`);
-  console.log(`📧 SendGrid konfigurerad: ${process.env.SENDGRID_API_KEY ? 'Ja' : 'Nej'}`);
+  console.log(`📧 Gmail SMTP konfigurerad: ${process.env.GMAIL_USER ? 'Ja' : 'Nej'}`);
+  console.log(`📧 Från email: ${process.env.GMAIL_USER || 'Inte satt'}`);
   console.log(`🌐 Tillgänglig på: http://localhost:${PORT}`);
   console.log(`🌐 Eller på: http://0.0.0.0:${PORT}`);
 });

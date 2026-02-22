@@ -15,11 +15,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useToast } from '../../context/ToastContext';
 
 export default function LoginScreen({ navigation }) {
   const { theme } = useTheme();
-  const { login, loginWithGoogle, googleAuthRequest } = useAuth();
+  const { login, loginWithGoogle, googleAuthRequest, resetPassword } = useAuth();
   const { t } = useLanguage();
+  const toast = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -35,7 +37,7 @@ export default function LoginScreen({ navigation }) {
     setLoading(false);
 
     if (!result.success) {
-      Alert.alert(t('error.registrationFailed'), result.error);
+      toast.error(result.error);
     }
   };
   
@@ -47,6 +49,46 @@ export default function LoginScreen({ navigation }) {
     if (!result.success) {
       Alert.alert('Google-inloggning misslyckades', result.error);
     }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      Alert.alert(
+        'Email krävs',
+        'Ange din email-adress för att få en återställningslänk',
+        [
+          { text: 'OK' }
+        ]
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Återställ lösenord',
+      `Vill du få en återställningslänk skickad till ${email.trim()}?`,
+      [
+        { text: 'Avbryt', style: 'cancel' },
+        { 
+          text: 'Skicka', 
+          onPress: async () => {
+            setLoading(true);
+            const result = await resetPassword(email.trim().toLowerCase());
+            setLoading(false);
+            
+            if (result.success) {
+              toast.success(result.message);
+              Alert.alert(
+                'Email skickad!',
+                'Kolla din inkorg och följ instruktionerna för att återställa ditt lösenord.',
+                [{ text: 'OK' }]
+              );
+            } else {
+              toast.error(result.error);
+            }
+          }
+        },
+      ]
+    );
   };
 
   return (
@@ -94,7 +136,14 @@ export default function LoginScreen({ navigation }) {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.text }]}>Lösenord</Text>
+              <View style={styles.labelRow}>
+                <Text style={[styles.label, { color: theme.text }]}>Lösenord</Text>
+                <TouchableOpacity onPress={handleForgotPassword}>
+                  <Text style={[styles.forgotPasswordText, { color: theme.primary }]}>
+                    Glömt lösenord?
+                  </Text>
+                </TouchableOpacity>
+              </View>
               <TextInput
                 style={[
                   styles.input,
@@ -209,10 +258,19 @@ const styles = StyleSheet.create({
   inputGroup: {
     marginBottom: 20,
   },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   label: {
     fontSize: 14,
     fontWeight: '600',
-    marginBottom: 8,
+  },
+  forgotPasswordText: {
+    fontSize: 13,
+    fontWeight: '500',
   },
   input: {
     borderWidth: 1,

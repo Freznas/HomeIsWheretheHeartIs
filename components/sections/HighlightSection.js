@@ -76,7 +76,6 @@ export default function HighlightSection({ navigation }) {
                   scheduleEventReminder(event).then(notificationId => {
                     if (notificationId) {
                       saveScheduledEventKey(eventKey);
-                      console.log(`Notifikation schemalagd för event: ${event.title}`);
                     }
                   });
                 }

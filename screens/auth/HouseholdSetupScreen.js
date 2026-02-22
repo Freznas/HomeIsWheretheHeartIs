@@ -14,10 +14,15 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { createHousehold, joinHousehold } from '../../config/firebase';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import VerificationBanner from '../../components/common/VerificationBanner';
 
 export default function HouseholdSetupScreen({ navigation, route }) {
   const { userId, email } = route.params || {};
   const { t } = useLanguage();
+  const { currentUser, refreshUser } = useAuth();
+  const toast = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [householdName, setHouseholdName] = useState('');
@@ -31,8 +36,17 @@ export default function HouseholdSetupScreen({ navigation, route }) {
 
   // Skapa nytt hushåll
   const handleCreateHousehold = async () => {
+    // Refresh user status to get latest emailVerified value
+    await refreshUser();
+    
+    // Kolla email verification
+    if (!currentUser?.emailVerified) {
+      toast.warning('Du måste verifiera din email först');
+      return;
+    }
+
     if (!householdName.trim()) {
-      Alert.alert('Fel', 'Vänligen ange ett namn för ditt hushåll');
+      toast.warning('Vänligen ange ett namn för ditt hushåll');
       return;
     }
 
@@ -71,8 +85,17 @@ export default function HouseholdSetupScreen({ navigation, route }) {
 
   // Gå med i befintligt hushåll
   const handleJoinHousehold = async () => {
+    // Refresh user status to get latest emailVerified value
+    await refreshUser();
+    
+    // Kolla email verification
+    if (!currentUser?.emailVerified) {
+      toast.warning('Du måste verifiera din email först');
+      return;
+    }
+
     if (!inviteCode.trim() || inviteCode.length !== 6) {
-      Alert.alert('Fel', 'Vänligen ange en giltig 6-siffrig inbjudningskod');
+      toast.warning('Vänligen ange en giltig 6-siffrig inbjudningskod');
       return;
     }
 
@@ -114,6 +137,7 @@ export default function HouseholdSetupScreen({ navigation, route }) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
+        <VerificationBanner />
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}

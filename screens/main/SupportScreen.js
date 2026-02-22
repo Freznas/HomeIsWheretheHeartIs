@@ -1,50 +1,125 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, ScrollView, Alert } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useToast } from '../../context/ToastContext';
 import HeaderView from '../../components/common/HeaderView';
 
 export default function SupportScreen({ navigation }) {
   const { theme } = useTheme();
   const { t } = useLanguage();
+  const toast = useToast();
 
-  const openEmail = () => {
-    Linking.openURL('mailto:hearthishome120@gmail.com?subject=App Feedback');
+  const openEmail = async () => {
+    const email = 'hearthishome120@gmail.com';
+    const subject = 'App Feedback';
+    const body = '';
+    
+    // Funktion för att försöka öppna en specifik email-app
+    const tryOpenEmailApp = async (appName, url) => {
+      try {
+        const supported = await Linking.canOpenURL(url);
+        if (supported) {
+          await Linking.openURL(url);
+          return true;
+        } else {
+          // Försök öppna ändå, ibland fungerar det även om canOpenURL säger nej
+          await Linking.openURL(url);
+          return true;
+        }
+      } catch (error) {
+        console.log(`Could not open ${appName}:`, error);
+        toast.error(`${appName} finns inte installerad på denna enhet`);
+        return false;
+      }
+    };
+
+    // Visa valalternativ
+    Alert.alert(
+      '📧 Skicka Feedback',
+      'Välj hur du vill skicka ditt meddelande:',
+      [
+        {
+          text: 'Avbryt',
+          style: 'cancel'
+        },
+        {
+          text: '📋 Kopiera Email',
+          onPress: async () => {
+            await Clipboard.setStringAsync(email);
+            toast.success('Email kopierad! 📋');
+            Alert.alert(
+              'Email kopierad',
+              `${email}\n\nNu kan du klistra in den i din email-app.`,
+              [{ text: 'OK' }]
+            );
+          }
+        },
+        {
+          text: '✉️ Gmail',
+          onPress: () => {
+            const gmailUrl = `googlegmail://co?to=${email}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            tryOpenEmailApp('Gmail', gmailUrl);
+          }
+        },
+        {
+          text: '✉️ Outlook',
+          onPress: () => {
+            const outlookUrl = `ms-outlook://compose?to=${email}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            tryOpenEmailApp('Outlook', outlookUrl);
+          }
+        },
+        {
+          text: '✉️ Standard Email-app',
+          onPress: () => {
+            const mailtoUrl = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            tryOpenEmailApp('Standard Email-app', mailtoUrl);
+          }
+        }
+      ]
+    );
   };
 
   return (
     <HeaderView
       title={t('support.title')}
-      onBackPress={() => navigation.goBack()}
-      onProfilePress={() => navigation.navigate('Profile')}
-      onSupportPress={() => navigation.navigate('Support')}
+      navigation={navigation}
     >
-      <View style={styles.header}>
-        <Text style={styles.icon}>🏠</Text>
-        <Text style={[styles.title, { color: theme.text }]}>{t('support.appName')}</Text>
-        <Text style={[styles.version, { color: theme.textSecondary }]}>{t('support.version')}</Text>
-      </View>
+      <ScrollView 
+        style={[styles.scrollView, { backgroundColor: theme.background }]}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={true}
+        bounces={true}
+      >
+        <View style={styles.header}>
+          <Text style={styles.icon}>🏠</Text>
+          <Text style={[styles.title, { color: theme.text }]}>{t('support.appName')}</Text>
+          <Text style={[styles.version, { color: theme.textSecondary }]}>{t('support.version')}</Text>
+        </View>
 
-      <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
-        <Text style={[styles.cardTitle, { color: theme.text }]}>🚧 {t('support.inDevelopment')}</Text>
-        <Text style={[styles.cardText, { color: theme.textSecondary }]}>
-          {t('support.inDevText')}
-        </Text>
-      </View>
+        <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+          <Text style={[styles.cardTitle, { color: theme.text }]}>🚧 {t('support.inDevelopment')}</Text>
+          <Text style={[styles.cardText, { color: theme.textSecondary }]}>
+            {t('support.inDevText')}
+          </Text>
+        </View>
 
-      <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
-        <Text style={[styles.cardTitle, { color: theme.text }]}>💬 {t('support.feedback')}</Text>
-        <Text style={[styles.cardText, { color: theme.textSecondary }]}>
-          {t('support.feedbackText')}
-        </Text>
-        <TouchableOpacity 
-          style={[styles.button, { backgroundColor: theme.primary }]}
-          onPress={openEmail}
-        >
-          <Text style={styles.buttonText}>📧 {t('support.sendFeedback')}</Text>
-        </TouchableOpacity>
-      </View>      <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
-        <Text style={[styles.cardTitle, { color: theme.text }]}>✨ {t('support.features')}</Text>
+        <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+          <Text style={[styles.cardTitle, { color: theme.text }]}>💬 {t('support.feedback')}</Text>
+          <Text style={[styles.cardText, { color: theme.textSecondary }]}>
+            {t('support.feedbackText')}
+          </Text>
+          <TouchableOpacity 
+            style={[styles.button, { backgroundColor: theme.primary }]}
+            onPress={openEmail}
+          >
+            <Text style={styles.buttonText}>📧 {t('support.sendFeedback')}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+          <Text style={[styles.cardTitle, { color: theme.text }]}>✨ {t('support.features')}</Text>
           <View style={styles.featureList}>
             <Text style={[styles.featureItem, { color: theme.textSecondary }]}>• Hantera hushållssysslor och dela uppgifter</Text>
             <Text style={[styles.featureItem, { color: theme.textSecondary }]}>• Dela shoppinglistor och pantryvaror</Text>
@@ -56,8 +131,8 @@ export default function SupportScreen({ navigation }) {
           </View>
         </View>
 
-      <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
-        <Text style={[styles.cardTitle, { color: theme.text }]}>📝 {t('support.upcomingFeatures')}</Text>
+        <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+          <Text style={[styles.cardTitle, { color: theme.text }]}>📝 {t('support.upcomingFeatures')}</Text>
           <View style={styles.featureList}>
             <Text style={[styles.featureItem, { color: theme.textSecondary }]}>• Personliga anteckningar</Text>
             <Text style={[styles.featureItem, { color: theme.textSecondary }]}>• Push-notifikationer för påminnelser</Text>
@@ -75,11 +150,19 @@ export default function SupportScreen({ navigation }) {
             © 2025 Home Is Where The Heart Is
           </Text>
         </View>
+      </ScrollView>
     </HeaderView>
   );
 }
 
 const styles = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: 20,
+    paddingBottom: 40,
+  },
   header: {
     alignItems: 'center',
     marginBottom: 30,

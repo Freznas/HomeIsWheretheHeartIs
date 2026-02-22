@@ -16,6 +16,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useToast } from '../../context/ToastContext';
+import { useNotifications } from '../../context/NotificationsContext';
 import { getUserHousehold, subscribeToChores, addChore, updateChore, deleteChore } from '../../config/firebase';
 import HeaderView from '../../components/common/HeaderView';
 import { SkeletonList, ChoreItemSkeleton } from '../../components/common/SkeletonLoader';
@@ -24,12 +26,15 @@ export default function ChoresPage({ navigation }) {
   const { theme } = useTheme();
   const { currentUser } = useAuth();
   const { t } = useLanguage();
+  const toast = useToast();
+  const { sendPushToHousehold } = useNotifications();
   
   // 🔥 Firebase state - realtidsuppdatering
   const [chores, setChores] = useState([]);
   const [householdId, setHouseholdId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
   
   const [modalVisible, setModalVisible] = useState(false);
   const [newTask, setNewTask] = useState("");
@@ -41,25 +46,20 @@ export default function ChoresPage({ navigation }) {
 
     const loadData = async () => {
       if (!currentUser?.id) {
-        console.log('ChoresScreen: Ingen användare inloggad');
         setLoading(false);
         return;
       }
 
       try {
-        console.log('ChoresScreen: Hämtar household för userId:', currentUser.id);
         // Hämta användarens hushålls-ID
         const result = await getUserHousehold(currentUser.id);
-        console.log('ChoresScreen: getUserHousehold result:', result);
         
         if (result.success && result.householdId) {
-          console.log('ChoresScreen: Household hittad:', result.householdId);
           setHouseholdId(result.householdId);
           
           // Prenumerera på realtidsuppdateringar
           unsubscribe = subscribeToChores(result.householdId, (response) => {
             if (response.success) {
-              console.log('ChoresScreen: Sysslor uppdaterade:', response.chores?.length || 0);
               setChores(response.chores || []);
             } else {
               console.error('Error subscribing to chores:', response.error);
@@ -67,12 +67,12 @@ export default function ChoresPage({ navigation }) {
             setLoading(false);
           });
         } else {
-          console.log('ChoresScreen: Ingen household hittades. Result:', result);
           setLoading(false);
         }
       } catch (error) {
         console.error('ChoresScreen: Error loading household:', error);
-        Alert.alert('Fel', 'Kunde inte ladda hushållsinformation');
+        toast.error('Kunde inte ladda hushållsinformation');
+        setError(error.message);
         setLoading(false);
       }
     };
@@ -98,33 +98,39 @@ export default function ChoresPage({ navigation }) {
     if (!chore) return;
 
     try {
+      const newCompletedState = !chore.completed;
       const result = await updateChore(
         householdId,
         id,
-        { completed: !chore.completed },
+        { completed: newCompletedState },
         currentUser.id
       );
 
-      if (!result.success) {
-        Alert.alert('Fel', 'Kunde inte uppdatera sysslan');
+      if (result.success && newCompletedState) {
+        // 🔔 Send push notification when chore is completed
+        await sendPushToHousehold({
+          title: '✅ Syssla klar!',
+          body: `${currentUser.displayName || 'Någon'} klarade av: ${chore.task}`,
+          data: { type: 'chores', screen: 'ChoresPage' },
+          excludeUserId: currentUser.id,
+        });
+      } else if (!result.success) {
+        toast.error('Kunde inte uppdatera sysslan');
       }
     } catch (error) {
       console.error('Error toggling chore:', error);
-      Alert.alert('Fel', 'Ett fel uppstod vid uppdatering');
+      toast.error('Ett fel uppstod vid uppdatering');
     }
   };
 
   const handleAddChore = async () => {
     if (!newTask.trim() || !newAssignee.trim()) {
-      Alert.alert('Fyll i alla fält', 'Uppgift och tilldelad person måste anges');
+      toast.warning('Uppgift och tilldelad person måste anges');
       return;
     }
-
-    console.log('ChoresScreen: handleAddChore - householdId:', householdId);
-    console.log('ChoresScreen: handleAddChore - currentUser:', currentUser?.id);
     
     if (!householdId) {
-      Alert.alert('Fel', 'Inget hushåll hittat. HouseholdId: ' + householdId);
+      toast.error('Inget hushåll hittat');
       return;
     }
 
@@ -147,12 +153,21 @@ export default function ChoresPage({ navigation }) {
         setNewTask("");
         setNewAssignee("");
         setModalVisible(false);
+        toast.success('Sysslan har lagts till!');
+        
+        // 🔔 Send push notification to household
+        await sendPushToHousehold({
+          title: '✅ Ny syssla tillagd',
+          body: `${currentUser.displayName || 'Någon'} lade till: ${newTask.trim()} → ${newAssignee.trim()}`,
+          data: { type: 'chores', screen: 'ChoresPage' },
+          excludeUserId: currentUser.id,
+        });
       } else {
-        Alert.alert('Fel', 'Kunde inte lägga till sysslan');
+        toast.error('Kunde inte lägga till sysslan');
       }
     } catch (error) {
       console.error('Error adding chore:', error);
-      Alert.alert('Fel', 'Ett fel uppstod');
+      toast.error('Ett fel uppstod');
     }
   };
 

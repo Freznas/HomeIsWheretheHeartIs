@@ -1,19 +1,28 @@
 {
   "expo": {
-    "name": "make-households-great-again",
-    "slug": "snack-8ec6151d-f856-434e-be72-4a379f150ddc",
+    "name": "Home Is Where The Hearth Is",
+    "slug": "home-is-where-the-hearth-is",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "scheme": "homeisheart",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.homeishearth.app",
+      "buildNumber": "1",
       "infoPlist": {
         "NSCalendarsUsageDescription": "Denna app behöver åtkomst till din kalender för att synkronisera familjehändelser med din telefonkalender.",
         "NSLocationWhenInUseUsageDescription": "Denna app behöver din plats för att visa aktuell väderinformation för din område.",
@@ -22,6 +31,8 @@
       }
     },
     "android": {
+      "package": "com.homeishearth.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -40,6 +51,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e1d681c0-de9f-43f8-9367-72dc4d93ce63"
+      }
     }
   }
 }

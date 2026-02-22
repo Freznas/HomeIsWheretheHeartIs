@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert, RefreshControl } from "react-native";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert, RefreshControl, Image } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useToast } from '../../context/ToastContext';
+import { useNotifications } from '../../context/NotificationsContext';
 import { getUserHousehold, subscribeToBills, addBill, updateBill, deleteBill } from '../../config/firebase';
+import { pickAndUploadImage, deleteImage, getPathFromURL } from '../../utils/imageUpload';
 import HeaderView from '../../components/common/HeaderView';
 import { SkeletonList, BillItemSkeleton } from '../../components/common/SkeletonLoader';
 
@@ -13,12 +16,15 @@ export default function BillsPage({ navigation }) {
   const { theme } = useTheme();
   const { currentUser } = useAuth();
   const { t } = useLanguage();
+  const toast = useToast();
+  const { sendPushToHousehold } = useNotifications();
   
   // 🔥 Firebase state - realtidsuppdatering
   const [bills, setBills] = useState([]);
   const [householdId, setHouseholdId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
   
   const [modalVisible, setModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -27,6 +33,8 @@ export default function BillsPage({ navigation }) {
   const [newDueDate, setNewDueDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [newStatus, setNewStatus] = useState("Ej betald");
+  const [newReceipt, setNewReceipt] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [errors, setErrors] = useState({});
 
   // 🔥 Firebase - Hämta hushålls-ID och prenumerera på räkningar
@@ -59,7 +67,8 @@ export default function BillsPage({ navigation }) {
         }
       } catch (error) {
         console.error('Error loading household:', error);
-        Alert.alert('Fel', 'Kunde inte ladda hushållsinformation');
+        toast.error('Kunde inte ladda hushållsinformation');
+        setError(error.message);
         setLoading(false);
       }
     };
@@ -95,6 +104,7 @@ export default function BillsPage({ navigation }) {
     // Konvertera datum string till Date objekt
     setNewDueDate(item.dueDate ? new Date(item.dueDate) : new Date());
     setNewStatus(item.status);
+    setNewReceipt(item.receipt || null);
     setModalVisible(true);
   };
 
@@ -104,6 +114,7 @@ export default function BillsPage({ navigation }) {
     setNewAmount("");
     setNewDueDate(new Date());
     setNewStatus("Ej betald");
+    setNewReceipt(null);
     setModalVisible(true);
   };
 
@@ -125,6 +136,29 @@ export default function BillsPage({ navigation }) {
     }
   };
 
+  const handleUploadReceipt = async () => {
+    try {
+      setUploadingImage(true);
+      
+      const storagePath = `bills/${householdId}/${Date.now()}.jpg`;
+      const downloadURL = await pickAndUploadImage(storagePath, {
+        aspect: [3, 4],
+        quality: 0.8,
+        compress: { width: 800, height: 1067, compress: 0.7 },
+      });
+      
+      if (downloadURL) {
+        setNewReceipt(downloadURL);
+        toast.success('📸 Kvitto uppladdadt!');
+      }
+    } catch (error) {
+      console.error('Error uploading receipt:', error);
+      toast.error('Kunde inte ladda upp kvitto');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const handleSave = async () => {
     let newErrors = {};
     if (!newName.trim()) newErrors.name = "Fyll i räkningsnamn";
@@ -135,7 +169,7 @@ export default function BillsPage({ navigation }) {
     if (Object.keys(newErrors).length > 0) return;
 
     if (!householdId) {
-      Alert.alert('Fel', 'Inget hushåll hittat');
+      toast.error('Inget hushåll hittat');
       return;
     }
 
@@ -144,22 +178,46 @@ export default function BillsPage({ navigation }) {
       
       if (editingItem) {
         // 🔄 Uppdatera befintlig räkning i Firebase
+        const updates = {
+          name: newName.trim(),
+          amount: newAmount.trim(),
+          dueDate: formattedDate,
+          status: newStatus,
+        };
+        
+        // Add receipt if changed
+        if (newReceipt !== editingItem.receipt) {
+          updates.receipt = newReceipt;
+          
+          // Delete old receipt if exists
+          if (editingItem.receipt && editingItem.receipt.startsWith('http')) {
+            const oldPath = getPathFromURL(editingItem.receipt);
+            if (oldPath) {
+              await deleteImage(oldPath);
+            }
+          }
+        }
+        
         const result = await updateBill(
           householdId,
           editingItem.id,
-          {
-            name: newName.trim(),
-            amount: newAmount.trim(),
-            dueDate: formattedDate,
-            status: newStatus,
-          },
+          updates,
           currentUser.id
         );
 
         if (!result.success) {
-          Alert.alert('Fel', 'Kunde inte uppdatera räkningen');
+          toast.error('Kunde inte uppdatera räkningen');
           return;
         }
+        toast.success('Räkningen har uppdaterats!');
+        
+        // 🔔 Send push notification when bill is updated
+        await sendPushToHousehold({
+          title: '💰 Räkning uppdaterad',
+          body: `${currentUser.displayName || 'Någon'} uppdaterade: ${newName.trim()} (${newAmount.trim()} kr)`,
+          data: { type: 'bills', screen: 'BillsPage' },
+          excludeUserId: currentUser.id,
+        });
       } else {
         // ➕ Lägg till ny räkning i Firebase
         const result = await addBill(
@@ -169,6 +227,7 @@ export default function BillsPage({ navigation }) {
             amount: newAmount.trim(),
             dueDate: formattedDate,
             status: newStatus,
+            receipt: newReceipt || null,
           },
           currentUser.id
         );
@@ -177,6 +236,15 @@ export default function BillsPage({ navigation }) {
           Alert.alert('Fel', 'Kunde inte lägga till räkningen');
           return;
         }
+        toast.success('Räkningen har lagts till!');
+        
+        // 🔔 Send push notification when bill is added
+        await sendPushToHousehold({
+          title: '💰 Ny räkning tillagd',
+          body: `${currentUser.displayName || 'Någon'} lade till: ${newName.trim()} (${newAmount.trim()} kr) - Förfaller: ${formattedDate}`,
+          data: { type: 'bills', screen: 'BillsPage' },
+          excludeUserId: currentUser.id,
+        });
       }
 
       setNewName("");
@@ -327,6 +395,40 @@ export default function BillsPage({ navigation }) {
                   <Text style={[styles.datePickerDoneText, { color: theme.textInverse }]}>Klar</Text>
                 </TouchableOpacity>
               )}
+              
+              {/* Receipt Upload Section */}
+              <View style={styles.receiptSection}>
+                <Text style={[styles.inputLabel, { color: theme.text }]}>Kvitto (valfritt):</Text>
+                {newReceipt ? (
+                  <View style={styles.receiptPreviewContainer}>
+                    <Image
+                      source={{ uri: newReceipt }}
+                      style={styles.receiptPreview}
+                    />
+                    <TouchableOpacity
+                      style={[styles.removeReceiptButton, { backgroundColor: theme.error }]}
+                      onPress={() => setNewReceipt(null)}
+                    >
+                      <Text style={styles.removeReceiptText}>×</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.uploadReceiptButton, { backgroundColor: theme.inputBackground, borderColor: theme.border }]}
+                    onPress={handleUploadReceipt}
+                    disabled={uploadingImage}
+                  >
+                    {uploadingImage ? (
+                      <ActivityIndicator size="small" color={theme.primary} />
+                    ) : (
+                      <>
+                        <Text style={styles.uploadReceiptIcon}>📸</Text>
+                        <Text style={[styles.uploadReceiptText, { color: theme.text }]}>Ladda upp kvitto</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
               
               <View style={styles.pickerWrapper}>
                 <Text style={[styles.pickerLabel, { color: theme.text }]}>Status:</Text>
@@ -518,6 +620,51 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "bold",
     fontSize: 16,
+  },
+  receiptSection: {
+    marginBottom: 16,
+  },
+  uploadReceiptButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    marginTop: 8,
+  },
+  uploadReceiptIcon: {
+    fontSize: 24,
+    marginRight: 8,
+  },
+  uploadReceiptText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  receiptPreviewContainer: {
+    position: 'relative',
+    marginTop: 8,
+  },
+  receiptPreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+  },
+  removeReceiptButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  removeReceiptText: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
   },
 });
 

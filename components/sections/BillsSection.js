@@ -20,26 +20,20 @@ export default function BillsSection({ navigation }) {
 
     const loadData = async () => {
       if (!currentUser?.id) {
-        console.log('BillsSection: No user');
         return;
       }
 
       try {
-        console.log('BillsSection: Loading bills for user:', currentUser.id);
         const result = await getUserHousehold(currentUser.id);
         
         if (result.success && result.householdId) {
-          console.log('BillsSection: Subscribing to bills for household:', result.householdId);
           unsubscribe = subscribeToBills(result.householdId, (response) => {
             if (!isMounted) return;
             
-            console.log('BillsSection: Bills update received:', response.bills?.length || 0);
             if (response.success) {
               setBills(response.bills || []);
             }
           });
-        } else {
-          console.log('BillsSection: No household found');
         }
       } catch (error) {
         console.error('BillsSection: Error loading bills:', error);
@@ -49,7 +43,6 @@ export default function BillsSection({ navigation }) {
     loadData();
 
     return () => {
-      console.log('BillsSection: Cleanup');
       isMounted = false;
       if (unsubscribe) {
         unsubscribe();
@@ -119,7 +112,7 @@ export default function BillsSection({ navigation }) {
           <Text style={[styles.dueInfo, { color: theme.textSecondary }]}>
             {t('bills.noUnpaid')}
           </Text>
-        )})
+        )}
       </View>
       {nextBill && (
         <View style={[styles.statusBadge, { backgroundColor: theme.error + '20' }]}>

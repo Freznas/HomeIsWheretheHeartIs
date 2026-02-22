@@ -1,16 +1,22 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, RefreshControl } from "react-native";
-import { useNotesData } from '../../hooks/useAsyncStorage';
 import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import HeaderView from '../../components/common/HeaderView';
 import { SkeletonList, NoteItemSkeleton } from '../../components/common/SkeletonLoader';
+import { getUserHousehold, subscribeToNotes, addNote, updateNote, deleteNote } from '../../config/firebase';
 
 export default function NotesPage({ navigation }) {
-  // 💾 AsyncStorage hook - hanterar all data automatiskt
-  const [notesList, setNotesList, removeNotesData, loading] = useNotesData();
   const { theme } = useTheme();
   const { t } = useLanguage();
+  const { currentUser } = useAuth();
+  const toast = useToast();
+  
+  const [notesList, setNotesList] = useState([]);
+  const [householdId, setHouseholdId] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -18,11 +24,51 @@ export default function NotesPage({ navigation }) {
   const [newContent, setNewContent] = useState("");
   const [errors, setErrors] = useState({});
 
+  // 🔥 Ladda hushålls-ID och prenumerera på anteckningar
+  useEffect(() => {
+    let unsubscribe = null;
+
+    const loadHousehold = async () => {
+      if (!currentUser?.id) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const result = await getUserHousehold(currentUser.id);
+        if (result.success && result.householdId) {
+          setHouseholdId(result.householdId);
+          
+          // Prenumerera på anteckningar (real-time)
+          unsubscribe = subscribeToNotes(result.householdId, (response) => {
+            if (response.success) {
+              setNotesList(response.notes || []);
+            } else {
+              console.error('Error subscribing to notes:', response.error);
+            }
+            setLoading(false);
+          });
+        } else {
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Error loading household:', error);
+        toast.error('Kunde inte ladda hushållsinformation');
+        setLoading(false);
+      }
+    };
+
+    loadHousehold();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [currentUser]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    // Data kommer från useNotesData hook som läser från AsyncStorage
-    // Simulera kort refresh för bättre UX
-    setTimeout(() => setRefreshing(false), 300);
+    // Firebase realtidsuppdatering sköter refresh automatiskt
+    setTimeout(() => setRefreshing(false), 500);
   }, []);
 
   const renderItem = useCallback(({ item }) => (
@@ -50,7 +96,7 @@ export default function NotesPage({ navigation }) {
     setModalVisible(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     let newErrors = {};
     if (!newTitle.trim()) newErrors.title = "Fyll i titel";
     if (!newContent.trim()) newErrors.content = "Fyll i anteckning";
@@ -59,47 +105,65 @@ export default function NotesPage({ navigation }) {
 
     if (Object.keys(newErrors).length > 0) return;
 
-    if (editingItem) {
-      // 🔄 Uppdatera befintlig anteckning (sparas automatiskt till AsyncStorage)
-      setNotesList(currentNotes => 
-        currentNotes.map(item => 
-          item.id === editingItem.id 
-            ? {
-                ...item,
-                title: newTitle.trim(),
-                content: newContent.trim(),
-              }
-            : item
-        )
-      );
-    } else {
-      // ➕ Lägg till ny anteckning (sparas automatiskt till AsyncStorage)
-      setNotesList(currentNotes => [
-        ...currentNotes,
-        {
-          id: Date.now().toString(),
-          title: newTitle.trim(),
-          content: newContent.trim(),
-        },
-      ]);
+    if (!householdId) {
+      toast.error('Inget hushåll hittat');
+      return;
     }
 
-    setNewTitle("");
-    setNewContent("");
-    setEditingItem(null);
-    setErrors({});
-    setModalVisible(false);
-  };
+    try {
+      if (editingItem) {
+        // 🔄 Uppdatera befintlig anteckning
+        const result = await updateNote(
+          householdId, 
+          editingItem.id, 
+          { title: newTitle.trim(), content: newContent.trim() },
+          currentUser.id
+        );
+        if (!result.success) {
+          toast.error('Kunde inte uppdatera anteckning');
+          return;
+        }
+      } else {
+        // ➕ Lägg till ny anteckning
+        const result = await addNote(
+          householdId,
+          { title: newTitle.trim(), content: newContent.trim() },
+          currentUser.id
+        );
+        if (!result.success) {
+          toast.error('Kunde inte lägga till anteckning');
+          return;
+        }
+      }
 
-  const handleDelete = () => {
-    if (editingItem) {
-      // 🗑️ Ta bort anteckning (sparas automatiskt till AsyncStorage)
-      setNotesList(currentNotes => currentNotes.filter(item => item.id !== editingItem.id));
       setModalVisible(false);
       setEditingItem(null);
       setNewTitle("");
       setNewContent("");
       setErrors({});
+    } catch (error) {
+      console.error('Error saving note:', error);
+      toast.error('Ett fel uppstod');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!editingItem || !householdId) return;
+
+    try {
+      const result = await deleteNote(householdId, editingItem.id);
+      if (result.success) {
+        setModalVisible(false);
+        setEditingItem(null);
+        setNewTitle("");
+        setNewContent("");
+        setErrors({});
+      } else {
+        toast.error('Kunde inte ta bort anteckning');
+      }
+    } catch (error) {
+      console.error('Error deleting note:', error);
+      toast.error('Ett fel uppstod');
     }
   };
 

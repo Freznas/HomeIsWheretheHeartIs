@@ -19,17 +19,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import HeaderView from '../../components/common/HeaderView';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getUserHousehold, subscribeToVisitors, addVisitor, updateVisitor, deleteVisitor } from '../../config/firebase';
 import * as Contacts from 'expo-contacts';
 import * as Calendar from 'expo-calendar';
-
-const STORAGE_KEY = '@visitors';
 
 export default function VisitorsPage({ navigation }) {
   const { theme } = useTheme();
   const { t } = useLanguage();
+  const { currentUser } = useAuth();
+  const toast = useToast();
+  
   const [visitors, setVisitors] = useState([]);
+  const [householdId, setHouseholdId] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingVisitor, setEditingVisitor] = useState(null);
@@ -53,15 +58,55 @@ export default function VisitorsPage({ navigation }) {
     notes: '',
   });
 
+  // 🔥 Ladda hushålls-ID
   useEffect(() => {
-    loadVisitors();
+    let unsubscribe = null;
+
+    const loadHousehold = async () => {
+      if (!currentUser?.id) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const result = await getUserHousehold(currentUser.id);
+        if (result.success && result.householdId) {
+          setHouseholdId(result.householdId);
+          
+          // Prenumerera på besökare (real-time)
+          unsubscribe = subscribeToVisitors(result.householdId, (response) => {
+            if (response.success) {
+              setVisitors(response.visitors || []);
+            } else {
+              console.error('Error subscribing to visitors:', response.error);
+            }
+            setLoading(false);
+          });
+        } else {
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Error loading household:', error);
+        toast.error('Kunde inte ladda hushållsinformation');
+        setLoading(false);
+      }
+    };
+
+    loadHousehold();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [currentUser]);
+
+  useEffect(() => {
     loadAllContacts();
   }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadVisitors();
-    setRefreshing(false);
+    // Firebase realtidsuppdatering sköter refresh automatiskt
+    setTimeout(() => setRefreshing(false), 500);
   };
 
   const loadAllContacts = async () => {
@@ -86,28 +131,6 @@ export default function VisitorsPage({ navigation }) {
     } catch (error) {
       console.error('Error loading contacts:', error);
       Alert.alert(t('error.title'), t('error.loadContacts'));
-    }
-  };
-
-  const loadVisitors = async () => {
-    try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        setVisitors(JSON.parse(stored));
-      }
-    } catch (error) {
-      console.error('Error loading visitors:', error);
-      Alert.alert(t('error.title'), t('error.loadVisitors'));
-    }
-  };
-
-  const saveVisitors = async (newVisitors) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newVisitors));
-      setVisitors(newVisitors);
-    } catch (error) {
-      console.error('Error saving visitors:', error);
-      Alert.alert(t('error.title'), t('error.saveVisitor'));
     }
   };
 
@@ -226,22 +249,6 @@ export default function VisitorsPage({ navigation }) {
       };
 
       await Calendar.createEventAsync(defaultCalendar.id, eventDetails);
-      
-      // Uppdatera även lokala kalendern i appen
-      const CALENDAR_KEY = '@calendar_events';
-      const storedEvents = await AsyncStorage.getItem(CALENDAR_KEY);
-      const events = storedEvents ? JSON.parse(storedEvents) : [];
-      
-      const newEvent = {
-        id: Date.now().toString(),
-        title: `Besök: ${visitor.name}`,
-        date: visitor.date || new Date().toISOString().split('T')[0],
-        time: visitor.time || '12:00',
-        description: visitor.notes || '',
-        color: '#9c27b0', // Lila för besökare
-      };
-      
-      await AsyncStorage.setItem(CALENDAR_KEY, JSON.stringify([...events, newEvent]));
     } catch (error) {
       console.error('Error adding to calendar:', error);
       Alert.alert(t('error.title'), t('error.addToCalendar'));
@@ -254,30 +261,41 @@ export default function VisitorsPage({ navigation }) {
       return;
     }
 
-    if (editingVisitor) {
-      const updated = visitors.map(v => 
-        v.id === editingVisitor.id ? { ...formData, id: v.id } : v
-      );
-      saveVisitors(updated);
-    } else {
-      const newVisitor = {
-        ...formData,
-        id: Date.now().toString(),
-      };
-      saveVisitors([...visitors, newVisitor]);
-      
-      // Lägg till i kalender om datum finns
-      if (newVisitor.date) {
-        await addToCalendar(newVisitor);
-        Alert.alert(
-          'Besökare tillagd!',
-          'Besökaren har lagts till både i listan och i din kalender.',
-          [{ text: 'OK' }]
-        );
-      }
+    if (!householdId) {
+      toast.error('Inget hushåll hittat');
+      return;
     }
 
-    setModalVisible(false);
+    try {
+      if (editingVisitor) {
+        // Uppdatera befintlig besökare
+        const result = await updateVisitor(householdId, editingVisitor.id, formData, currentUser.id);
+        if (!result.success) {
+          toast.error('Kunde inte uppdatera besökare');
+        }
+      } else {
+        // Lägg till ny besökare
+        const result = await addVisitor(householdId, formData, currentUser.id);
+        if (result.success) {
+          // Lägg till i kalender om datum finns
+          if (formData.date) {
+            await addToCalendar(formData);
+            Alert.alert(
+              'Besökare tillagd!',
+              'Besökaren har lagts till både i listan och i din kalender.',
+              [{ text: 'OK' }]
+            );
+          }
+        } else {
+          toast.error('Kunde inte lägga till besökare');
+        }
+      }
+
+      setModalVisible(false);
+    } catch (error) {
+      console.error('Error saving visitor:', error);
+      toast.error('Ett fel uppstod');
+    }
   };
 
   const handleDelete = (id) => {
@@ -289,9 +307,18 @@ export default function VisitorsPage({ navigation }) {
         {
           text: 'Ta bort',
           style: 'destructive',
-          onPress: () => {
-            const filtered = visitors.filter(v => v.id !== id);
-            saveVisitors(filtered);
+          onPress: async () => {
+            if (!householdId) return;
+            
+            try {
+              const result = await deleteVisitor(householdId, id);
+              if (!result.success) {
+                toast.error('Kunde inte ta bort besökare');
+              }
+            } catch (error) {
+              console.error('Error deleting visitor:', error);
+              toast.error('Ett fel uppstod');
+            }
           },
         },
       ]

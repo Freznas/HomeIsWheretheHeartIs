@@ -3,6 +3,7 @@ import { View, Text, ScrollView, StatusBar, Platform, TouchableOpacity } from "r
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
+import OfflineBanner from './OfflineBanner';
 
 import styles from "./Header.Styles"
 const HeaderView = ({ 
@@ -82,6 +83,9 @@ const HeaderView = ({
           </Text>
         </View>
       </View>
+
+      {/* Offline Banner */}
+      <OfflineBanner />
 
       {/* Content without ScrollView - let each screen handle its own scrolling */}
       {children}

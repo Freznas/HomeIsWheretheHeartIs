@@ -15,6 +15,8 @@ import {
   Platform,
   Clipboard,
   Share,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,7 +25,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import HeaderView from '../../components/common/HeaderView';
-import { getUserHousehold, subscribeToHousehold, leaveHousehold as leaveHouseholdFirebase, removeMember as removeMemberFirebase } from '../../config/firebase';
+import { getUserHousehold, subscribeToHousehold, leaveHousehold as leaveHouseholdFirebase, removeMember as removeMemberFirebase, updateUserProfile, getUserStats, updateUserPassword } from '../../config/firebase';
+import { pickAndUploadImage, takeAndUploadPhoto, deleteImage, getPathFromURL } from '../../utils/imageUpload';
 
 // Hushållssektion komponent
 function HouseholdSection({ theme, navigation, currentUser, showToast }) {
@@ -71,6 +74,12 @@ function HouseholdSection({ theme, navigation, currentUser, showToast }) {
   };
 
   const shareInviteCode = async () => {
+    // Kolla email verification
+    if (!currentUser?.emailVerified) {
+      showToast('Du måste verifiera din email för att bjuda in medlemmar', 'warning');
+      return;
+    }
+
     if (household?.inviteCode) {
       try {
         await Share.share({
@@ -281,13 +290,14 @@ function HouseholdSection({ theme, navigation, currentUser, showToast }) {
 export default function ProfilePage({ navigation }) {
   const { theme, isDarkMode, toggleTheme } = useTheme();
   const { currentUser, updateProfile, logout, deleteUser, resendVerificationEmail } = useAuth();
-  const { t } = useLanguage();
+  const { t, language, changeLanguage: setLanguage } = useLanguage();
   const { settings: notificationSettings, updateSettings: updateNotificationSettings, sendNotification, scheduleNotification } = useNotifications();
 
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(currentUser?.name || '');
   const [selectedAvatar, setSelectedAvatar] = useState(currentUser?.avatar || '👤');
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [stats, setStats] = useState({ notes: 0, visitors: 0, chores: 0 });
   
   // Lösenordsbyte
@@ -297,9 +307,7 @@ export default function ProfilePage({ navigation }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   
   // Notifikationsinställningar hämtas från context
-  
-  // Språkinställningar
-  const [language, setLanguage] = useState('sv'); // 'sv' eller 'en'
+  // Språkinställningar hämtas från context (setLanguage finns redan)
   
   // Toast-notifikationer
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
@@ -317,16 +325,28 @@ export default function ProfilePage({ navigation }) {
 
   const avatars = ['👤', '👨', '👩', '🧑', '👨‍💼', '👩‍💼', '👨‍🔧', '👩‍🔧', '👨‍🍳', '👩‍🍳', '🧔', '👴'];
 
-  // Ladda användarens statistik
+  // 🔥 Ladda användarens statistik från Firebase
   useEffect(() => {
-    // TODO: Hämta riktig data från AsyncStorage när vi implementerar användarspecifik data
-    // För nu visar vi placeholder-data
-    setStats({
-      notes: Math.floor(Math.random() * 10),
-      visitors: Math.floor(Math.random() * 5),
-      chores: Math.floor(Math.random() * 8),
-    });
-  }, []);
+    const loadStats = async () => {
+      if (!currentUser?.id) return;
+
+      try {
+        const householdResult = await getUserHousehold(currentUser.id);
+        if (householdResult.success && householdResult.householdId) {
+          const statsResult = await getUserStats(currentUser.id, householdResult.householdId);
+          if (statsResult.success && statsResult.stats) {
+            setStats(statsResult.stats);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading stats:', error);
+        // Fallback till default values
+        setStats({ notes: 0, visitors: 0, chores: 0 });
+      }
+    };
+
+    loadStats();
+  }, [currentUser]);
   
   // Visa toast-notifikation
   const showToast = (message, type = 'success') => {
@@ -456,10 +476,17 @@ export default function ProfilePage({ navigation }) {
       setShow2FASetup(false);
       setTwoFactorCode('');
       
-      // TODO: Spara till backend/AsyncStorage
-      // await updateProfile({ twoFactorEnabled: true });
-      
-      showToast('✅ 2FA aktiverat!', 'success');
+      // 🔥 Spara till Firebase
+      try {
+        const result = await updateUserProfile(currentUser.id, { twoFactorEnabled: true });
+        if (result.success) {
+          showToast('✅ 2FA aktiverat!', 'success');
+        } else {
+          showToast('⚠️ Kunde inte spara inställning', 'warning');
+        }
+      } catch (error) {
+        console.error('Error saving 2FA setting:', error);
+      }
     } else {
       showToast('❌ Fel kod, försök igen', 'error');
     }
@@ -480,10 +507,15 @@ export default function ProfilePage({ navigation }) {
             setGeneratedCode('');
             setCodeExpiry(null);
             
-            // TODO: Uppdatera backend/AsyncStorage
-            // await updateProfile({ twoFactorEnabled: false });
-            
-            showToast('🔓 2FA inaktiverat', 'info');
+            // 🔥 Uppdatera Firebase
+            try {
+              const result = await updateUserProfile(currentUser.id, { twoFactorEnabled: false });
+              if (result.success) {
+                showToast('🔓 2FA inaktiverat', 'info');
+              }
+            } catch (error) {
+              console.error('Error updating 2FA setting:', error);
+            }
           },
         },
       ]
@@ -521,6 +553,48 @@ export default function ProfilePage({ navigation }) {
       setPendingAction(null);
     } else {
       showToast('❌ Fel kod, försök igen', 'error');
+    }
+  };
+
+  const handleUploadAvatar = async (useCamera = false) => {
+    try {
+      setUploadingImage(true);
+      setShowAvatarPicker(false);
+      
+      const storagePath = `profiles/${currentUser.id}/${Date.now()}.jpg`;
+      
+      let downloadURL;
+      if (useCamera) {
+        downloadURL = await takeAndUploadPhoto(storagePath, {
+          aspect: [1, 1],
+          quality: 0.8,
+          compress: { width: 400, height: 400, compress: 0.7 },
+        });
+      } else {
+        downloadURL = await pickAndUploadImage(storagePath, {
+          aspect: [1, 1],
+          quality: 0.8,
+          compress: { width: 400, height: 400, compress: 0.7 },
+        });
+      }
+      
+      if (downloadURL) {
+        // Ta bort gammal bild om det finns en
+        if (currentUser.avatar && currentUser.avatar.startsWith('http')) {
+          const oldPath = getPathFromURL(currentUser.avatar);
+          if (oldPath) {
+            await deleteImage(oldPath);
+          }
+        }
+        
+        setSelectedAvatar(downloadURL);
+        showToast('✅ Profilbild uppladdad!', 'success');
+      }
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      showToast('❌ Kunde inte ladda upp bild', 'error');
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -602,14 +676,23 @@ export default function ProfilePage({ navigation }) {
       return;
     }
     
-    // TODO: Implementera lösenordsverifiering mot currentPassword
-    // För nu gör vi bara en uppdatering
-    
-    setShowPasswordModal(false);
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    showToast('✅ Lösenordet har ändrats!', 'success');
+    // 🔥 Verifiera och uppdatera lösenord via Firebase Auth
+    try {
+      const result = await updateUserPassword(currentPassword, newPassword);
+      
+      if (result.success) {
+        setShowPasswordModal(false);
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        showToast('✅ Lösenordet har ändrats!', 'success');
+      } else {
+        showToast(`❌ ${result.error}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error changing password:', error);
+      showToast('❌ Ett fel uppstod', 'error');
+    }
   };
 
   const toggleNotification = (key) => {
@@ -627,7 +710,6 @@ export default function ProfilePage({ navigation }) {
 
   const changeLanguage = (lang) => {
     setLanguage(lang);
-    // TODO: Implementera faktisk språkbyte i hela appen
     showToast(`🌍 Språk ändrat till ${lang === 'sv' ? 'Svenska' : 'English'}`, 'info');
   };
 
@@ -682,13 +764,22 @@ export default function ProfilePage({ navigation }) {
         >
           <TouchableOpacity
             onPress={() => isEditing && setShowAvatarPicker(true)}
-            disabled={!isEditing}
+            disabled={!isEditing || uploadingImage}
           >
-            <Text style={styles.avatarLarge}>{selectedAvatar}</Text>
+            {uploadingImage ? (
+              <ActivityIndicator size="large" color="#fff" />
+            ) : selectedAvatar?.startsWith('http') ? (
+              <Image
+                source={{ uri: selectedAvatar }}
+                style={styles.avatarImage}
+              />
+            ) : (
+              <Text style={styles.avatarLarge}>{selectedAvatar}</Text>
+            )}
           </TouchableOpacity>
           {isEditing && (
             <Text style={styles.avatarHint}>
-              Tryck för att byta avatar
+              {uploadingImage ? 'Laddar upp...' : 'Tryck för att byta profilbild'}
             </Text>
           )}
         </LinearGradient>
@@ -829,6 +920,14 @@ export default function ProfilePage({ navigation }) {
           {/* Notifikationsinställningar */}
           <View style={styles.settingGroup}>
             <Text style={[styles.settingLabel, { color: theme.text, marginBottom: 10 }]}>🔔 Notifikationer</Text>
+            
+            <TouchableOpacity
+              style={[styles.settingRow, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+              onPress={() => navigation.navigate('NotificationSettings')}
+            >
+              <Text style={[styles.settingLabel, { color: theme.text }]}>📱 Push-notifikationer</Text>
+              <Text style={[styles.settingArrow, { color: theme.textSecondary }]}>›</Text>
+            </TouchableOpacity>
             
             <View style={styles.toggleRow}>
               <Text style={[styles.toggleLabel, { color: theme.textSecondary }]}>Påminnelser</Text>
@@ -1162,7 +1261,30 @@ export default function ProfilePage({ navigation }) {
           onPress={() => setShowAvatarPicker(false)}
         >
           <View style={[styles.avatarPickerContainer, { backgroundColor: theme.cardBackground }]}>
-            <Text style={[styles.pickerTitle, { color: theme.text }]}>Välj avatar</Text>
+            <Text style={[styles.pickerTitle, { color: theme.text }]}>Välj profilbild</Text>
+            
+            {/* Image Upload Options */}
+            <View style={styles.imageUploadOptions}>
+              <TouchableOpacity
+                style={[styles.uploadOption, { backgroundColor: theme.primary }]}
+                onPress={() => handleUploadAvatar(false)}
+              >
+                <Text style={styles.uploadOptionIcon}>📷</Text>
+                <Text style={styles.uploadOptionText}>Välj från galleri</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.uploadOption, { backgroundColor: theme.primary }]}
+                onPress={() => handleUploadAvatar(true)}
+              >
+                <Text style={styles.uploadOptionIcon}>📸</Text>
+                <Text style={styles.uploadOptionText}>Ta foto</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={[styles.pickerSubtitle, { color: theme.textSecondary }]}>eller välj emoji</Text>
+            
+            {/* Emoji Avatars */}
             <View style={styles.avatarGrid}>
               {avatars.map((avatar) => (
                 <TouchableOpacity
@@ -1282,6 +1404,13 @@ const styles = StyleSheet.create({
     padding: 30,
     borderRadius: 15,
     marginBottom: 20,
+  },
+  avatarImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 3,
+    borderColor: '#fff',
   },
   avatarLarge: {
     fontSize: 100,
@@ -1551,15 +1680,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatarPickerContainer: {
-    width: '80%',
+    width: '85%',
+    maxHeight: '80%',
     borderRadius: 15,
     padding: 20,
   },
   pickerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 20,
+    marginBottom: 16,
     textAlign: 'center',
+  },
+  pickerSubtitle: {
+    fontSize: 14,
+    marginTop: 16,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  imageUploadOptions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    gap: 12,
+  },
+  uploadOption: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  uploadOptionIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  uploadOptionText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   avatarGrid: {
     flexDirection: 'row',

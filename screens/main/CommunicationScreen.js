@@ -1,326 +1,451 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  StatusBar,
+  ActivityIndicator,
 } from "react-native";
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useCommunicationData } from '../../hooks/useAsyncStorage';
 import { useTheme } from '../../context/ThemeContext';
-import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
+import { useNotifications } from '../../context/NotificationsContext';
+import { useToast } from '../../context/ToastContext';
+import { getUserHousehold, subscribeToChat, sendChatMessage, markMessageAsRead } from '../../config/firebase';
 import HeaderView from '../../components/common/HeaderView';
 
 export default function CommunicationPage({ navigation }) {
   const { theme } = useTheme();
-  const { t } = useLanguage();
-  const [conversation, setConversation, removeCommunicationData, loading] = useCommunicationData();
+  const { currentUser } = useAuth();
+  const { sendPushToHousehold } = useNotifications();
+  const toast = useToast();
+  
+  const [messages, setMessages] = useState([]);
+  const [householdId, setHouseholdId] = useState(null);
+  const [householdName, setHouseholdName] = useState('');
+  const [loading, setLoading] = useState(true);
   const [input, setInput] = useState("");
+  const flatListRef = useRef(null);
 
-  const handleSend = () => {
-    if (input.trim() === "") return;
-    
-    const now = new Date();
-    const timestamp = `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
-    
-    const newMessage = {
-      id: Date.now(),
-      sender: "Du",
-      text: input.trim(),
-      timestamp: timestamp,
+  // 🔥 Ladda hushålls-ID
+  useEffect(() => {
+    const loadHousehold = async () => {
+      if (!currentUser?.id) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const result = await getUserHousehold(currentUser.id);
+        if (result.success && result.household) {
+          setHouseholdId(result.household.id);
+          setHouseholdName(result.household.name);
+        }
+      } catch (error) {
+        console.error('Error loading household:', error);
+        toast.error('Kunde inte ladda hushållsdata');
+      } finally {
+        setLoading(false);
+      }
     };
-    setConversation(currentConversation => [...currentConversation, newMessage]);
+
+    loadHousehold();
+  }, [currentUser]);
+
+  // 🔥 Prenumerera på chat-meddelanden (real-time)
+  useEffect(() => {
+    if (!householdId) return;
+
+    const unsubscribe = subscribeToChat(householdId, (result) => {
+      if (result.success && result.messages) {
+        // Sortera meddelanden efter timestamp
+        const sortedMessages = result.messages.sort((a, b) => {
+          const timeA = a.createdAt?.toMillis?.() || 0;
+          const timeB = b.createdAt?.toMillis?.() || 0;
+          return timeA - timeB;
+        });
+        setMessages(sortedMessages);
+
+        // Markera meddelanden som lästa
+        sortedMessages.forEach((msg) => {
+          if (msg.sender !== currentUser.id && !msg.readBy?.includes(currentUser.id)) {
+            markMessageAsRead(householdId, msg.id, currentUser.id);
+          }
+        });
+
+        // Auto-scroll till senaste meddelandet
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [householdId, currentUser]);
+
+  // Gruppera meddelanden per dag
+  const groupedMessages = useMemo(() => {
+    const groups = {};
+    
+    messages.forEach((msg) => {
+      const date = msg.createdAt?.toDate?.();
+      if (!date) return;
+
+      const dateKey = date.toLocaleDateString('sv-SE', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+
+      if (!groups[dateKey]) {
+        groups[dateKey] = [];
+      }
+      groups[dateKey].push(msg);
+    });
+
+    // Konvertera till array för FlatList
+    const result = [];
+    Object.keys(groups).forEach((dateKey) => {
+      result.push({ type: 'date', date: dateKey });
+      groups[dateKey].forEach((msg) => {
+        result.push({ type: 'message', ...msg });
+      });
+    });
+
+    return result;
+  }, [messages]);
+
+  // Skicka meddelande
+  const handleSend = async () => {
+    if (!input.trim() || !householdId) return;
+
+    const messageText = input.trim();
     setInput("");
+
+    try {
+      const result = await sendChatMessage(
+        householdId,
+        { text: messageText },
+        currentUser.id,
+        currentUser.displayName || currentUser.email
+      );
+
+      if (result.success) {
+        // 🔔 Skicka push notification till andra medlemmar
+        await sendPushToHousehold({
+          title: `💬 ${currentUser.displayName || 'Nytt meddelande'}`,
+          body: messageText.length > 50 ? messageText.substring(0, 50) + '...' : messageText,
+          data: { type: 'chat', screen: 'CommunicationPage' },
+          excludeUserId: currentUser.id,
+        });
+      } else {
+        toast.error('Kunde inte skicka meddelandet');
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast.error('Ett fel uppstod');
+    }
   };
 
-  const handleBack = () => {
-    navigation.goBack();
+  // Formatera timestamp
+  const formatTime = (timestamp) => {
+    if (!timestamp?.toDate) return '';
+    const date = timestamp.toDate();
+    return date.toLocaleTimeString('sv-SE', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
-  // Show loading state while data is being fetched
+  // Rendera meddelande eller datum-separator
+  const renderItem = ({ item, index }) => {
+    if (item.type === 'date') {
+      return (
+        <View style={styles.dateSeparator}>
+          <View style={[styles.dateLine, { backgroundColor: theme.border }]} />
+          <Text style={[styles.dateText, { color: theme.textSecondary }]}>
+            {item.date}
+          </Text>
+          <View style={[styles.dateLine, { backgroundColor: theme.border }]} />
+        </View>
+      );
+    }
+
+    const isMyMessage = item.sender === currentUser.id;
+    const isFirstInGroup = index === 0 || groupedMessages[index - 1]?.sender !== item.sender;
+
+    return (
+      <View style={[
+        styles.messageContainer,
+        isMyMessage ? styles.myMessageContainer : styles.otherMessageContainer,
+      ]}>
+        {!isMyMessage && isFirstInGroup && (
+          <Text style={[styles.senderName, { color: theme.textSecondary }]}>
+            {item.senderName}
+          </Text>
+        )}
+        <View style={[
+          styles.messageBubble,
+          isMyMessage 
+            ? { backgroundColor: theme.primary } 
+            : { backgroundColor: theme.cardBackground, borderColor: theme.border, borderWidth: 1 }
+        ]}>
+          <Text style={[
+            styles.messageText,
+            isMyMessage ? { color: theme.textInverse } : { color: theme.text }
+          ]}>
+            {item.text}
+          </Text>
+          <View style={styles.messageFooter}>
+            <Text style={[
+              styles.timestamp,
+              isMyMessage 
+                ? { color: theme.textInverse, opacity: 0.7 } 
+                : { color: theme.textSecondary }
+            ]}>
+              {formatTime(item.createdAt)}
+            </Text>
+            {isMyMessage && (
+              <Text style={[styles.readStatus, { color: theme.textInverse, opacity: 0.7 }]}>
+                {item.readBy?.length > 1 ? '✓✓' : '✓'}
+              </Text>
+            )}
+          </View>
+        </View>
+      </View>
+    );
+  };
+
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, styles.centerContent]}>
-        <Text style={styles.loadingText}>Laddar konversation...</Text>
-      </SafeAreaView>
+      <HeaderView title="Chatt" navigation={navigation}>
+        <View style={[styles.centerContent, { backgroundColor: theme.background }]}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+            Laddar konversation...
+          </Text>
+        </View>
+      </HeaderView>
+    );
+  }
+
+  if (!householdId) {
+    return (
+      <HeaderView title="Chatt" navigation={navigation}>
+        <View style={[styles.centerContent, { backgroundColor: theme.background }]}>
+          <Text style={[styles.emptyIcon, { color: theme.textSecondary }]}>🏠</Text>
+          <Text style={[styles.emptyText, { color: theme.text }]}>
+            Inget hushåll hittat
+          </Text>
+          <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
+            Skapa eller gå med i ett hushåll för att chatta
+          </Text>
+        </View>
+      </HeaderView>
     );
   }
 
   return (
-    <HeaderView
-      title={t('chat.title')}
-      subtitle="Anna, Erik, Du"
+    <HeaderView 
+      title="Chatt" 
+      subtitle={householdName}
       navigation={navigation}
     >
-
-      {/* Messages */}
-      <ScrollView 
-        style={[styles.messagesContainer, { backgroundColor: theme.background }]}
-        contentContainerStyle={styles.messagesContent}
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
-        {conversation.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={[styles.emptyStateText, { color: theme.text }]}>💬 Ingen konversation ännu!</Text>
-            <Text style={[styles.emptyStateSubtext, { color: theme.textSecondary }]}>
-              Skicka det första meddelandet för att starta konversationen med familjen
-            </Text>
-          </View>
-        ) : (
-          conversation.map(msg => (
-            <View key={msg.id} style={[
-              styles.messageRow,
-              msg.sender === "Du" ? [styles.myMessage, { backgroundColor: theme.primary }] : [styles.otherMessage, { backgroundColor: theme.cardBackground, borderColor: theme.border }]
-            ]}>
-              <View style={styles.messageHeader}>
-                <Text style={[styles.sender, msg.sender === "Du" ? { color: theme.textInverse } : { color: theme.text }]}>
-                  {msg.sender}
+        <View style={[styles.container, { backgroundColor: theme.background }]}>
+          {/* Meddelanden */}
+          <FlatList
+            ref={flatListRef}
+            data={groupedMessages}
+            renderItem={renderItem}
+            keyExtractor={(item, index) => item.id || `date-${index}`}
+            contentContainerStyle={styles.messagesList}
+            showsVerticalScrollIndicator={false}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            ListEmptyComponent={() => (
+              <View style={styles.emptyChat}>
+                <Text style={[styles.emptyIcon, { color: theme.textSecondary }]}>💬</Text>
+                <Text style={[styles.emptyText, { color: theme.text }]}>
+                  Ingen konversation ännu
                 </Text>
-                <Text style={[styles.timestamp, msg.sender === "Du" ? { color: theme.textInverse, opacity: 0.8 } : { color: theme.textSecondary }]}>
-                  {msg.timestamp}
+                <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
+                  Skicka det första meddelandet!
                 </Text>
               </View>
-              <Text style={[styles.messageText, msg.sender === "Du" ? { color: theme.textInverse } : { color: theme.text }]}>
-                {msg.text}
-              </Text>
-            </View>
-          ))
-        )}
-      </ScrollView>
-
-      {/* Input Area */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.inputContainer}
-      >
-        <View style={[styles.inputRow, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-          <TouchableOpacity style={styles.attachButton}>
-            <Text style={styles.attachIcon}>📎</Text>
-          </TouchableOpacity>
-          <TextInput
-            style={[styles.messageInput, { color: theme.text }]}
-            value={input}
-            onChangeText={setInput}
-            placeholder="Skriv ett meddelande..."
-            placeholderTextColor={theme.textSecondary}
-            returnKeyType="send"
-            onSubmitEditing={handleSend}
-            multiline
-            maxLength={500}
+            )}
           />
-          <TouchableOpacity 
-            style={[styles.sendButton, input.trim() && styles.sendButtonActive]} 
-            onPress={handleSend}
-          >
-            <Text style={styles.sendButtonText}>↗</Text>
-          </TouchableOpacity>
+
+          {/* Input Area */}
+          <View style={[styles.inputContainer, { 
+            backgroundColor: theme.cardBackground,
+            borderTopColor: theme.border 
+          }]}>
+            <TextInput
+              style={[styles.input, { 
+                backgroundColor: theme.inputBackground,
+                color: theme.text,
+                borderColor: theme.border 
+              }]}
+              value={input}
+              onChangeText={setInput}
+              placeholder="Skriv ett meddelande..."
+              placeholderTextColor={theme.textSecondary}
+              multiline
+              maxLength={500}
+            />
+            <TouchableOpacity
+              style={[styles.sendButton, { 
+                backgroundColor: theme.primary,
+                opacity: input.trim() ? 1 : 0.5
+              }]}
+              onPress={handleSend}
+              disabled={!input.trim()}
+            >
+              <Text style={[styles.sendButtonText, { color: '#fff' }]}>
+                📤
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </HeaderView>
   );
 }
 
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
   },
-  header: {
-    backgroundColor: "#3949ab",
-    flexDirection: "row",
-    alignItems: "center",
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+  },
+  emptyChat: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  messagesList: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    paddingTop: Platform.OS === 'ios' ? 50 : 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
+    flexGrow: 1,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    justifyContent: "center",
-    alignItems: "center",
+  dateSeparator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
   },
-  backIcon: {
-    fontSize: 20,
-    color: "#fff",
-    fontWeight: "bold",
-  },
-  headerCenter: {
+  dateLine: {
     flex: 1,
-    alignItems: "center",
-    marginHorizontal: 16,
+    height: 1,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-  headerSubtitle: {
+  dateText: {
     fontSize: 12,
-    color: "rgba(255,255,255,0.8)",
-    marginTop: 2,
+    fontWeight: '600',
+    marginHorizontal: 12,
+    textTransform: 'capitalize',
   },
-  optionsButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    justifyContent: "center",
-    alignItems: "center",
+  messageContainer: {
+    marginVertical: 4,
+    maxWidth: '80%',
   },
-  optionsIcon: {
-    fontSize: 20,
-    color: "#fff",
-    fontWeight: "bold",
+  myMessageContainer: {
+    alignSelf: 'flex-end',
+    alignItems: 'flex-end',
   },
-  messagesContainer: {
-    flex: 1,
-    backgroundColor: "#f8f9fa",
+  otherMessageContainer: {
+    alignSelf: 'flex-start',
+    alignItems: 'flex-start',
   },
-  messagesContent: {
+  senderName: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+    marginLeft: 12,
+  },
+  messageBubble: {
     paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingBottom: 100,
-  },
-  messageRow: {
-    marginBottom: 16,
-    padding: 12,
-    borderRadius: 16,
-    maxWidth: "85%",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  myMessage: {
-    alignSelf: "flex-end",
-    backgroundColor: "#007AFF",
-    borderBottomRightRadius: 4,
-  },
-  otherMessage: {
-    alignSelf: "flex-start",
-    backgroundColor: "#fff",
-    borderBottomLeftRadius: 4,
-  },
-  messageHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
-  },
-  sender: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#666",
-  },
-  mySender: {
-    color: "rgba(255,255,255,0.8)",
-  },
-  timestamp: {
-    fontSize: 10,
-    color: "#999",
-  },
-  myTimestamp: {
-    color: "rgba(255,255,255,0.6)",
+    paddingVertical: 10,
+    borderRadius: 20,
+    maxWidth: '100%',
   },
   messageText: {
     fontSize: 16,
-    lineHeight: 20,
-    color: "#333",
+    lineHeight: 22,
   },
-  myMessageText: {
-    color: "#fff",
+  messageFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    justifyContent: 'flex-end',
+  },
+  timestamp: {
+    fontSize: 11,
+    marginRight: 4,
+  },
+  readStatus: {
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   inputContainer: {
-    backgroundColor: "#fff",
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: Platform.OS === 'ios' ? 12 : 12,
     borderTopWidth: 1,
-    borderTopColor: "#eee",
-    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
   },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-  },
-  attachButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#f0f0f0",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  attachIcon: {
-    fontSize: 18,
-  },
-  messageInput: {
+  input: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 20,
+    minHeight: 44,
+    maxHeight: 100,
+    borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 12,
+    paddingTop: 12,
     fontSize: 16,
-    backgroundColor: "#f8f9fa",
-    maxHeight: 100,
-    minHeight: 40,
+    borderWidth: 1,
+    marginRight: 12,
+    textAlignVertical: 'center',
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#ddd",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  sendButtonActive: {
-    backgroundColor: "#007AFF",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 0,
   },
   sendButtonText: {
-    fontSize: 18,
-    color: "#fff",
-    fontWeight: "bold",
-  },
-  centerContent: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    fontSize: 16,
-    color: "#6b7280",
-    fontWeight: "500",
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 32,
-  },
-  emptyStateText: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#6b7280",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: "#9ca3af",
-    textAlign: "center",
-    lineHeight: 20,
+    fontSize: 20,
   },
 });
+

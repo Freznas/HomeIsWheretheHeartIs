@@ -13,14 +13,18 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  RefreshControl
+  RefreshControl,
+  Image
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from "@react-native-picker/picker";
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useToast } from '../../context/ToastContext';
+import { useNotifications } from '../../context/NotificationsContext';
 import { getUserHousehold, subscribeToPantry, addPantryItem, updatePantryItem, deletePantryItem } from '../../config/firebase';
+import { pickAndUploadImage, deleteImage, getPathFromURL } from '../../utils/imageUpload';
 import HeaderView from '../../components/common/HeaderView';
 import { SkeletonList, PantryCategorySkeleton } from '../../components/common/SkeletonLoader';
 
@@ -29,6 +33,8 @@ export default function PantryPage({ navigation }) {
   const { theme } = useTheme();
   const { currentUser } = useAuth();
   const { t } = useLanguage();
+  const toast = useToast();
+  const { sendPushToHousehold } = useNotifications();
   
   // 🔥 Firebase state - realtidsuppdatering
   const [pantryItems, setPantryItems] = useState([]);
@@ -43,6 +49,8 @@ export default function PantryPage({ navigation }) {
   const [newQuantity, setNewQuantity] = useState("");
   const [newUnit, setNewUnit] = useState("st");
   const [newCategory, setNewCategory] = useState("");
+  const [newImage, setNewImage] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [errors, setErrors] = useState({});
   const [showUnitPicker, setShowUnitPicker] = useState(false);
   const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
@@ -276,17 +284,27 @@ export default function PantryPage({ navigation }) {
       onPress={() => openEditModal(item)}
       activeOpacity={0.7}
     >
-      <View style={styles.itemHeader}>
-        <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
-        <View style={[styles.quantityBadge, { backgroundColor: theme.primary }]}>
-          <Text style={[styles.quantityText, { color: theme.textInverse }]}>{item.quantity + " " + item.unit}</Text>
+      <View style={styles.itemRow}>
+        {item.image && (
+          <Image
+            source={{ uri: item.image }}
+            style={styles.itemImage}
+          />
+        )}
+        <View style={styles.itemContent}>
+          <View style={styles.itemHeader}>
+            <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
+            <View style={[styles.quantityBadge, { backgroundColor: theme.primary }]}>
+              <Text style={[styles.quantityText, { color: theme.textInverse }]}>{item.quantity + " " + item.unit}</Text>
+            </View>
+          </View>
+          <View style={styles.itemFooter}>
+            <View style={styles.categoryTag}>
+              <Text style={styles.categoryText}>{item.category}</Text>
+            </View>
+            <Text style={styles.editHint}>Tryck för att redigera</Text>
+          </View>
         </View>
-      </View>
-      <View style={styles.itemFooter}>
-        <View style={styles.categoryTag}>
-          <Text style={styles.categoryText}>{item.category}</Text>
-        </View>
-        <Text style={styles.editHint}>Tryck för att redigera</Text>
       </View>
     </TouchableOpacity>
   );
@@ -324,6 +342,7 @@ export default function PantryPage({ navigation }) {
     setNewQuantity(item.quantity);
     setNewUnit(item.unit);
     setNewCategory(item.category);
+    setNewImage(item.image || null);
     setModalVisible(true);
   };
 
@@ -333,7 +352,31 @@ export default function PantryPage({ navigation }) {
     setNewQuantity("");
     setNewUnit("st");
     setNewCategory("");
+    setNewImage(null);
     setModalVisible(true);
+  };
+
+  const handleUploadImage = async () => {
+    try {
+      setUploadingImage(true);
+      
+      const storagePath = `pantry/${householdId}/${Date.now()}.jpg`;
+      const downloadURL = await pickAndUploadImage(storagePath, {
+        aspect: [4, 3],
+        quality: 0.8,
+        compress: { width: 600, height: 450, compress: 0.7 },
+      });
+      
+      if (downloadURL) {
+        setNewImage(downloadURL);
+        toast.success('📷 Bild uppladdad!');
+      }
+    } catch (error) {
+      console.error('Error uploading pantry image:', error);
+      toast.error('Kunde inte ladda upp bild');
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const handleSave = async () => {
@@ -347,7 +390,7 @@ export default function PantryPage({ navigation }) {
     if (Object.keys(newErrors).length > 0) return;
 
     if (!householdId) {
-      Alert.alert('Fel', 'Du måste vara med i ett hushåll för att lägga till varor.');
+      toast.error('Du måste vara med i ett hushåll för att lägga till varor.');
       return;
     }
 
@@ -356,16 +399,43 @@ export default function PantryPage({ navigation }) {
 
     if (editingItem) {
       // 🔥 Uppdatera befintlig vara i Firebase
-      const result = await updatePantryItem(householdId, editingItem.id, {
+      const updates = {
         name: newName.trim(),
         quantity: newQuantity.trim(),
         unit: newUnit,
         category: matchedCategory,
-      }, currentUser.id);
+      };
+      
+      // Add image if changed
+      if (newImage !== editingItem.image) {
+        updates.image = newImage;
+        
+        // Delete old image if exists and is different
+        if (editingItem.image && editingItem.image.startsWith('http')) {
+          const oldPath = getPathFromURL(editingItem.image);
+          if (oldPath) {
+            await deleteImage(oldPath);
+          }
+        }
+      }
+      
+      const result = await updatePantryItem(householdId, editingItem.id, updates, currentUser.id);
       
       if (!result.success) {
-        Alert.alert('Fel', result.error || 'Kunde inte uppdatera vara');
+        toast.error(result.error || 'Kunde inte uppdatera vara');
         return;
+      }
+      toast.success('Varan har uppdaterats!');
+      
+      // 🔔 Check if quantity is low and send warning
+      const quantity = parseInt(newQuantity.trim());
+      if (!isNaN(quantity) && quantity <= 2) {
+        await sendPushToHousehold({
+          title: '⚠️ Lågt lager i skafferiet',
+          body: `${newName.trim()} håller på att ta slut! Endast ${newQuantity.trim()} ${newUnit} kvar.`,
+          data: { type: 'pantry', screen: 'PantryPage', alert: 'low-stock' },
+          excludeUserId: currentUser.id,
+        });
       }
     } else {
       // 🔥 Lägg till ny vara i Firebase
@@ -374,12 +444,22 @@ export default function PantryPage({ navigation }) {
         quantity: newQuantity.trim(),
         unit: newUnit,
         category: matchedCategory,
+        image: newImage || null,
       }, currentUser.id);
       
       if (!result.success) {
-        Alert.alert('Fel', result.error || 'Kunde inte lägga till vara');
+        toast.error(result.error || 'Kunde inte lägga till vara');
         return;
       }
+      toast.success('Varan har lagts till!');
+      
+      // 🔔 Send push notification to household
+      await sendPushToHousehold({
+        title: '🥫 Ny vara i skafferiet',
+        body: `${currentUser.displayName || 'Någon'} lade till: ${newName.trim()} (${newQuantity.trim()} ${newUnit})`,
+        data: { type: 'pantry', screen: 'PantryPage' },
+        excludeUserId: currentUser.id,
+      });
     }
 
     resetModal();
@@ -391,10 +471,11 @@ export default function PantryPage({ navigation }) {
       const result = await deletePantryItem(householdId, editingItem.id);
       
       if (!result.success) {
-        Alert.alert('Fel', result.error || 'Kunde inte ta bort vara');
+        toast.error(result.error || 'Kunde inte ta bort vara');
         return;
       }
       
+      toast.success('Varan har tagits bort');
       resetModal();
     }
   };
@@ -577,6 +658,40 @@ export default function PantryPage({ navigation }) {
                 )}
                 {errors.category && <Text style={[styles.errorText, { color: theme.error }]}>{errors.category}</Text>}
               </View>
+              
+              {/* Image Upload Section */}
+              <View style={styles.inputGroup}>
+                <Text style={[styles.inputLabel, { color: theme.text }]}>Produktbild (valfritt)</Text>
+                {newImage ? (
+                  <View style={styles.imagePreviewContainer}>
+                    <Image
+                      source={{ uri: newImage }}
+                      style={styles.imagePreview}
+                    />
+                    <TouchableOpacity
+                      style={[styles.removeImageButton, { backgroundColor: theme.error }]}
+                      onPress={() => setNewImage(null)}
+                    >
+                      <Text style={styles.removeImageText}>×</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.uploadImageButton, { backgroundColor: theme.inputBackground, borderColor: theme.border }]}
+                    onPress={handleUploadImage}
+                    disabled={uploadingImage}
+                  >
+                    {uploadingImage ? (
+                      <ActivityIndicator size="small" color={theme.primary} />
+                    ) : (
+                      <>
+                        <Text style={styles.uploadImageIcon}>📷</Text>
+                        <Text style={[styles.uploadImageText, { color: theme.text }]}>Lägg till bild</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
             </ScrollView>
 
             <View style={styles.modalActions}>
@@ -720,6 +835,19 @@ const styles = StyleSheet.create({
     elevation: 3,
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.04)",
+  },
+  itemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  itemImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  itemContent: {
+    flex: 1,
   },
   itemHeader: {
     flexDirection: "row",
@@ -1058,6 +1186,48 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  uploadImageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    marginTop: 8,
+  },
+  uploadImageIcon: {
+    fontSize: 24,
+    marginRight: 8,
+  },
+  uploadImageText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    marginTop: 8,
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  removeImageText: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
   },
 });
 

@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile as firebaseUpdateProfile, sendEmailVerification } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile as firebaseUpdateProfile, sendEmailVerification, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -184,6 +184,55 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const resetPassword = async (email) => {
+    try {
+      await sendPasswordResetEmail(auth, email);
+      return { success: true, message: 'Återställningslänk skickad till din email' };
+    } catch (error) {
+      console.error('Reset password error:', error);
+      let errorMessage = 'Kunde inte skicka återställningslänk';
+      
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'Ingen användare hittades med denna email';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Ogiltig email-adress';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'För många försök. Försök igen senare';
+      }
+      
+      return { success: false, error: errorMessage };
+    }
+  };
+
+  const refreshUser = async () => {
+    try {
+      if (!auth.currentUser) return { success: false };
+      
+      // Reload user from Firebase to get latest emailVerified status
+      await auth.currentUser.reload();
+      
+      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      const userData = userDoc.exists() ? userDoc.data() : {};
+      
+      const user = {
+        id: auth.currentUser.uid,
+        email: auth.currentUser.email,
+        emailVerified: auth.currentUser.emailVerified,
+        name: userData.name || auth.currentUser.displayName || auth.currentUser.email.split('@')[0],
+        avatar: userData.avatar || '👤',
+        role: userData.role || 'medlem',
+      };
+      
+      setCurrentUser(user);
+      await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+      
+      return { success: true, emailVerified: user.emailVerified };
+    } catch (error) {
+      console.error('Refresh user error:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -195,6 +244,8 @@ export const AuthProvider = ({ children }) => {
         logout,
         updateProfile,
         resendVerificationEmail,
+        resetPassword,
+        refreshUser,
       }}
     >
       {children}

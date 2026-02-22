@@ -9,6 +9,7 @@ import React from 'react';
 // React Navigation bibliotek - det mest populära navigationsbiblioteket för React Native
 import { NavigationContainer } from '@react-navigation/native';  // "Roten" för all navigation
 import { createStackNavigator } from '@react-navigation/stack';  // Skapar en stack (som en kortlek) av skärmar
+import * as Linking from 'expo-linking';  // För deep linking
 
 // Theme Context för dark mode
 import { ThemeProvider } from './context/ThemeContext';
@@ -18,6 +19,12 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 // Language Context för språkbyten
 import { LanguageProvider } from './context/LanguageContext';
+// Offline Context för offline support
+import { OfflineProvider } from './context/OfflineContext';
+// Toast Context för notifications
+import { ToastProvider } from './context/ToastContext';
+// Error Boundary för error handling
+import ErrorBoundary from './components/common/ErrorBoundary';
 
 // STEG 2: Importera alla sidor som ska vara navigerbara
 // Varje import representerar en skärm som användaren kan navigera till
@@ -39,7 +46,9 @@ import VisitorsScreen from './screens/main/VisitorsScreen';           // Besöka
 import CalendarScreen from './screens/main/CalendarScreen';           // Kalender sidan
 import WeatherScreen from './screens/main/WeatherScreen';             // Väder sidan
 import ProfileScreen from './screens/main/ProfileScreen';             // Profilsidan
+import NotificationSettingsScreen from './screens/main/NotificationSettingsScreen'; // Notification settings
 import SupportScreen from './screens/main/SupportScreen';             // Support och info-sidan
+import { navigationRef } from './services/NavigationService';         // Navigation service för deep linking
 
 // STEG 3: Skapa Stack Navigator
 // Stack = "hög av papper" - nya sidor läggs på toppen, kan "pop" tillbaka till föregående
@@ -47,7 +56,7 @@ const Stack = createStackNavigator();
 
 // STEG 4: Huvudkomponent för Navigation
 function NavigationContent() {
-  const { isLoggedIn, isLoading } = useAuth();
+  const { isLoggedIn, isLoading, currentUser, householdId } = useAuth();
 
   if (isLoading) {
     return null; // Eller en loading screen
@@ -75,6 +84,7 @@ function NavigationContent() {
         <Stack.Screen name="CalendarPage" component={CalendarScreen} />
         <Stack.Screen name="WeatherPage" component={WeatherScreen} />
         <Stack.Screen name="Profile" component={ProfileScreen} />
+        <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
         <Stack.Screen name="Support" component={SupportScreen} />
         <Stack.Screen name="HouseholdSetupScreen" component={HouseholdSetupScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
@@ -93,22 +103,51 @@ function NavigationContent() {
 }
 
 export default function Navigation() {
+  const linking = {
+    prefixes: ['homeisheart://', 'https://homeisheart.app'],
+    config: {
+      screens: {
+        Home: '',
+        ShoppingListPage: 'shopping',
+        BillsPage: 'bills',
+        ChoresPage: 'chores',
+        CalendarPage: 'calendar',
+        PantryPage: 'pantry',
+        CommunicationPage: 'chat',
+        Profile: 'profile',
+        NotificationSettings: 'notifications',
+      },
+    },
+  };
+
   return (
     // STEG 4.5: ThemeProvider och AuthProvider - Wrappa allt i contexts
-    <ThemeProvider>
-      <LanguageProvider>
-        <AuthProvider>
-          <NotificationsProvider>
-            {/* STEG 5: NavigationContainer - MÅSTE wrappa all navigation
-                Fungerar som en "manager" för all navigation i hela appen
-                Håller reda på nuvarande skärm, navigation history, och hanterar deep links */}
-            <NavigationContainer>
-              <NavigationContent />
-            </NavigationContainer>
-          </NotificationsProvider>
-        </AuthProvider>
-      </LanguageProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <LanguageProvider>
+          <AuthProvider>
+            <OfflineProvider>
+              <ToastProvider>
+                <NavigationContainer ref={navigationRef} linking={linking}>
+                  <NotificationsProviderWrapper />
+                </NavigationContainer>
+              </ToastProvider>
+            </OfflineProvider>
+          </AuthProvider>
+        </LanguageProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
+  );
+}
+
+// Wrapper för NotificationsProvider som behöver userId
+function NotificationsProviderWrapper() {
+  const { currentUser, householdId } = useAuth();
+  
+  return (
+    <NotificationsProvider userId={currentUser?.id} householdId={householdId}>
+      <NavigationContent />
+    </NotificationsProvider>
   );
 }
 

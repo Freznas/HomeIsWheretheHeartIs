@@ -20,6 +20,9 @@ import { Picker } from "@react-native-picker/picker";
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useOffline } from '../../context/OfflineContext';
+import { useToast } from '../../context/ToastContext';
+import { useNotifications } from '../../context/NotificationsContext';
 import { getUserHousehold, subscribeToShoppingList, addShoppingListItem, updateShoppingListItem, deleteShoppingListItem } from '../../config/firebase';
 import HeaderView from '../../components/common/HeaderView';
 import { SkeletonList, ShoppingItemSkeleton } from '../../components/common/SkeletonLoader';
@@ -28,6 +31,9 @@ export default function ShoppingListPage({ navigation }) {
   const { theme } = useTheme();
   const { currentUser } = useAuth();
   const { t } = useLanguage();
+  const { isOffline, cacheData, getCachedData, addPendingAction } = useOffline();
+  const toast = useToast();
+  const { sendPushToHousehold } = useNotifications();
   
   // 🔥 Firebase state - realtidsuppdatering
   const [items, setItems] = useState([]);
@@ -65,7 +71,10 @@ export default function ShoppingListPage({ navigation }) {
     // Lyssna på realtidsuppdateringar från Firebase
     const unsubscribe = subscribeToShoppingList(householdId, (result) => {
       if (result.success) {
-        setItems(result.items || []);
+        const newItems = result.items || [];
+        setItems(newItems);
+        // Cacha data för offline-läge
+        cacheData(`shopping_${householdId}`, newItems);
       }
       setLoading(false);
     });
@@ -82,6 +91,15 @@ export default function ShoppingListPage({ navigation }) {
     const result = await getUserHousehold(currentUser.id);
     if (result.success && result.householdId) {
       setHouseholdId(result.householdId);
+      
+      // Om offline, ladda cached data
+      if (isOffline) {
+        const cached = await getCachedData(`shopping_${result.householdId}`);
+        if (cached) {
+          setItems(cached);
+          setLoading(false);
+        }
+      }
     } else {
       setLoading(false);
     }
@@ -93,34 +111,85 @@ export default function ShoppingListPage({ navigation }) {
     const item = items.find(i => i.id === id);
     if (!item) return;
 
-    // 🔥 Uppdatera completed status i Firebase
-    await updateShoppingListItem(householdId, id, {
-      completed: !item.completed
-    }, currentUser.id);
+    // Optimistisk uppdatering (uppdatera UI direkt)
+    setItems(items.map(i => i.id === id ? { ...i, completed: !i.completed } : i));
+
+    if (isOffline) {
+      // Spara action för senare synkning
+      await addPendingAction({
+        type: 'updateShoppingItem',
+        householdId,
+        itemId: id,
+        data: { completed: !item.completed },
+        userId: currentUser.id,
+        execute: async () => {
+          await updateShoppingListItem(householdId, id, { completed: !item.completed }, currentUser.id);
+        }
+      });
+    } else {
+      // 🔥 Uppdatera completed status i Firebase
+      await updateShoppingListItem(householdId, id, {
+        completed: !item.completed
+      }, currentUser.id);
+    }
   };
 
   const addItem = async () => {
     if (!newItemName.trim()) return;
     
     if (!householdId) {
-      Alert.alert(t('error.title'), t('error.needHouseholdToAdd'));
+      toast.error(t('error.needHouseholdToAdd'));
       return;
     }
 
     const quantityText = newItemQuantity.trim() || "1";
     const quantityString = `${quantityText} ${newItemUnit}`;
     
-    // 🔥 Lägg till ny vara i Firebase
-    const result = await addShoppingListItem(householdId, {
+    const newItem = {
       name: newItemName.trim(),
       quantity: quantityString,
       completed: false,
       category: "Övrigt"
-    }, currentUser.id);
-    
-    if (!result.success) {
-      Alert.alert('Fel', result.error || 'Kunde inte lägga till vara');
-      return;
+    };
+
+    if (isOffline) {
+      // Optimistisk tillägg
+      const tempItem = { ...newItem, id: `temp_${Date.now()}`, addedBy: currentUser.id };
+      setItems([...items, tempItem]);
+      
+      // Spara för synkning
+      await addPendingAction({
+        type: 'addShoppingItem',
+        householdId,
+        data: newItem,
+        userId: currentUser.id,
+        execute: async () => {
+          await addShoppingListItem(householdId, newItem, currentUser.id);
+        }
+      });
+      
+      toast.warning('Varan kommer att läggas till när du är online igen');
+    } else {
+      // 🔥 Lägg till ny vara i Firebase
+      const result = await addShoppingListItem(householdId, newItem, currentUser.id);
+      
+      if (!result.success) {
+        toast.error(result.error || 'Kunde inte lägga till vara');
+        return;
+      }
+      
+      toast.success('Varan har lagts till!');
+      
+      // 🔔 Skicka push notification till hushållet
+      await sendPushToHousehold({
+        title: '🛒 Ny vara på inköpslistan',
+        body: `${currentUser.displayName || 'Någon'} lade till: ${newItemName.trim()}`,
+        data: {
+          type: 'shopping',
+          screen: 'ShoppingListPage',
+        },
+        excludeUserId: currentUser.id,
+      });
     }
     
     setNewItemName("");

@@ -18,6 +18,7 @@ import { useTheme } from './context/ThemeContext';
 import { useAuth } from './context/AuthContext';
 import { useLanguage } from './context/LanguageContext';
 import HeaderView from "./components/common/HeaderView";
+import VerificationBanner from "./components/common/VerificationBanner";
 import HighlightSection from "./components/sections/HighlightSection";
 import CalendarSection from "./components/sections/CalendarSection";
 import PantrySection from "./components/sections/PantrySection";
@@ -47,9 +48,6 @@ export default function App({ navigation }) {
       setRefreshKey(prev => prev + 1);
     }, [])
   );
-  
-  // 🐛 Debug: Kontrollera att navigation prop når fram korrekt
-  console.log("App component rendered with navigation:", !!navigation);
 
   // 📍 STEG 2: FAB position state - Ursprungsposition för Floating Action Button
   const originalFabX = screenWidth - 90;    // 90px från höger kant (fast position)
@@ -169,11 +167,8 @@ export default function App({ navigation }) {
   // 👆 STEG 8: Tap Gesture Handler - Skiljer mellan TAP (öppna chat) och DRAG (flytta FAB)
   const onTapHandlerStateChange = (event) => {
     if (event.nativeEvent.state === State.END) {
-      console.log("TAP detected, isDragging:", isDragging, "hasMoved:", hasMoved);
-      
       // 🎯 SMART LOGIC: Endast navigera om det INTE är en drag-operation
       if (!isDragging && !hasMoved) {
-        console.log("Navigating to CommunicationPage");
         
         // 🛡️ Safety check: Kontrollera att navigation prop finns
         if (navigation) {
@@ -240,6 +235,8 @@ export default function App({ navigation }) {
             </Text>
           </View>
         </View>
+
+        <VerificationBanner />
 
         <ScrollView 
           style={styles.scrollContainer}

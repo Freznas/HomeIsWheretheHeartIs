@@ -234,3 +234,31 @@ Health check endpoint
   "timestamp": "2025-12-03T10:00:00.000Z"
 }
 ```
+---
+
+## 🚀 Deployment till Produktion
+
+Backend-servern är förberedd för deployment till flera plattformar:
+- **Railway** (Rekommenderat - Enklast setup)
+- **Render** (Generös free tier)
+- **Vercel** (Serverless)
+- **Heroku** (Etablerad plattform)
+
+**Se [DEPLOYMENT.md](DEPLOYMENT.md) för detaljerade instruktioner.**
+
+### Snabbstart - Railway Deployment:
+```bash
+# Installera Railway CLI
+npm install -g @railway/cli
+
+# Login och deploy
+railway login
+railway init
+railway up
+
+# Sätt environment variables
+railway variables set SENDGRID_API_KEY="your_key"
+railway variables set SENDGRID_FROM_EMAIL="your_email"
+```
+
+Efter deployment, uppdatera `EXPO_PUBLIC_API_URL` i frontend `.env` med din production URL.

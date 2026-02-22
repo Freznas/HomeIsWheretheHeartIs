@@ -1,7 +1,10 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+import * as NavigationService from '../services/NavigationService';
 
 // Konfigurera hur notifikationer ska visas
 Notifications.setNotificationHandler({
@@ -22,13 +25,16 @@ export const useNotifications = () => {
   return context;
 };
 
-export const NotificationsProvider = ({ children }) => {
+export const NotificationsProvider = ({ children, userId, householdId }) => {
   const [expoPushToken, setExpoPushToken] = useState('');
+  const [notification, setNotification] = useState(false);
   const [settings, setSettings] = useState({
     reminders: true,
     visitors: true,
     bills: true,
-    chores: false,
+    chores: true,
+    shopping: true,
+    pantry: true,
   });
   const notificationListener = useRef();
   const responseListener = useRef();
@@ -37,17 +43,31 @@ export const NotificationsProvider = ({ children }) => {
     // Ladda inställningar från AsyncStorage
     loadSettings();
 
-    // Registrera för push notifications
-    registerForPushNotificationsAsync().then(token => setExpoPushToken(token));
+    // Registrera för push notifications och spara token
+    registerForPushNotificationsAsync().then(async token => {
+      if (token) {
+        setExpoPushToken(token);
+        // Spara token till Firebase om userId finns
+        if (userId) {
+          await savePushTokenToFirebase(userId, token);
+        }
+      }
+    });
 
     // Lyssna på notifikationer när appen är öppen
     notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-      console.log('Notification received:', notification);
+      setNotification(notification);
     });
 
     // Lyssna på användarens interaktion med notifikationen
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log('Notification response:', response);
+      // Navigera till rätt screen baserat på notification data
+      const data = response.notification.request.content.data;
+      
+      if (data?.screen) {
+        // Navigera till rätt skärm baserat på notification type
+        handleNotificationNavigation(data);
+      }
     });
 
     return () => {
@@ -58,7 +78,57 @@ export const NotificationsProvider = ({ children }) => {
         responseListener.current.remove();
       }
     };
-  }, []);
+  }, [userId]);
+
+  // Hantera navigation från notifications
+  const handleNotificationNavigation = (data) => {
+    const { screen, type, ...params } = data;
+    
+    // Navigera till rätt skärm
+    switch (screen) {
+      case 'ShoppingListPage':
+        NavigationService.navigate('ShoppingListPage', params);
+        break;
+      case 'BillsPage':
+        NavigationService.navigate('BillsPage', params);
+        break;
+      case 'ChoresPage':
+        NavigationService.navigate('ChoresPage', params);
+        break;
+      case 'CalendarPage':
+        NavigationService.navigate('CalendarPage', params);
+        break;
+      case 'PantryPage':
+        NavigationService.navigate('PantryPage', params);
+        break;
+      case 'CommunicationPage':
+        NavigationService.navigate('CommunicationPage', params);
+        break;
+      default:
+        // Om screen inte matchar, gå till Home
+        NavigationService.navigate('Home');
+    }
+  };
+
+  const savePushTokenToFirebase = async (uid, token) => {
+    try {
+      // Importera Firebase här för att undvika circular dependencies
+      const { db } = await import('../config/firebase');
+      const { doc, setDoc } = await import('firebase/firestore');
+      
+      await setDoc(doc(db, 'users', uid), {
+        pushToken: token,
+        deviceInfo: {
+          platform: Platform.OS,
+          isDevice: Device.isDevice,
+          modelName: Device.modelName,
+        },
+        lastUpdated: new Date(),
+      }, { merge: true });
+    } catch (error) {
+      console.error('Error saving push token:', error);
+    }
+  };
 
   const loadSettings = async () => {
     try {
@@ -84,7 +154,6 @@ export const NotificationsProvider = ({ children }) => {
   const scheduleNotification = async ({ title, body, data, trigger, category }) => {
     // Kolla om den här typen av notifikationer är aktiverad
     if (!settings[category]) {
-      console.log(`Notifications for ${category} are disabled`);
       return null;
     }
 
@@ -108,7 +177,6 @@ export const NotificationsProvider = ({ children }) => {
   // Skicka omedelbar notifikation
   const sendNotification = async ({ title, body, data, category }) => {
     if (!settings[category]) {
-      console.log(`Notifications for ${category} are disabled`);
       return null;
     }
 
@@ -198,6 +266,66 @@ export const NotificationsProvider = ({ children }) => {
     return null;
   };
 
+  // Skicka push notification till andra användare i hushållet
+  const sendPushToHousehold = async ({ title, body, data, excludeUserId }) => {
+    if (!householdId) {
+      return;
+    }
+
+    try {
+      // Hämta alla användare i hushållet
+      const { db } = await import('../config/firebase');
+      const { collection, query, where, getDocs } = await import('firebase/firestore');
+      
+      const membersQuery = query(
+        collection(db, 'households', householdId, 'members'),
+        where('status', '==', 'active')
+      );
+      
+      const snapshot = await getDocs(membersQuery);
+      const pushTokens = [];
+      
+      for (const doc of snapshot.docs) {
+        const memberData = doc.data();
+        if (memberData.userId !== excludeUserId && memberData.pushToken) {
+          pushTokens.push(memberData.pushToken);
+        }
+      }
+      
+      // Skicka notifikationer via Expo Push API
+      if (pushTokens.length > 0) {
+        await sendExpoPushNotifications(pushTokens, { title, body, data });
+      }
+    } catch (error) {
+      console.error('Error sending push to household:', error);
+    }
+  };
+
+  const sendExpoPushNotifications = async (pushTokens, { title, body, data }) => {
+    const messages = pushTokens.map(token => ({
+      to: token,
+      sound: 'default',
+      title,
+      body,
+      data,
+    }));
+
+    try {
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(messages),
+      });
+      
+      const result = await response.json();
+    } catch (error) {
+      console.error('Error sending push notifications:', error);
+    }
+  };
+
   // Schemalägg påminnelse för syssla
   const scheduleChoreReminder = async (chore) => {
     const dueDate = new Date(chore.dueDate);
@@ -217,6 +345,7 @@ export const NotificationsProvider = ({ children }) => {
 
   const value = {
     expoPushToken,
+    notification,
     settings,
     updateSettings,
     scheduleNotification,
@@ -227,6 +356,7 @@ export const NotificationsProvider = ({ children }) => {
     scheduleVisitorReminder,
     scheduleBillReminder,
     scheduleChoreReminder,
+    sendPushToHousehold,
   };
 
   return (
@@ -239,6 +369,11 @@ export const NotificationsProvider = ({ children }) => {
 // Helper function för att registrera för push notifications
 async function registerForPushNotificationsAsync() {
   let token;
+
+  // Expo Go har begränsningar med push notifications
+  if (!Device.isDevice) {
+    return;
+  }
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
@@ -258,15 +393,21 @@ async function registerForPushNotificationsAsync() {
   }
   
   if (finalStatus !== 'granted') {
-    console.log('Failed to get push token for push notification!');
     return;
   }
   
   try {
-    token = (await Notifications.getExpoPushTokenAsync()).data;
-    console.log('Push notification token:', token);
+    const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+    
+    if (!projectId) {
+      return;
+    }
+
+    token = (await Notifications.getExpoPushTokenAsync({
+      projectId,
+    })).data;
   } catch (error) {
-    console.log('Error getting push token:', error);
+    console.error('Error getting push token:', error);
   }
 
   return token;

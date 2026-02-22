@@ -2,14 +2,44 @@ import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
-import { useVisitorsData } from '../../hooks/useAsyncStorage';
+import { useAuth } from '../../context/AuthContext';
+import { getUserHousehold, subscribeToVisitors } from '../../config/firebase';
 
 export default function VisitorsSection({ navigation }) {
   const { theme } = useTheme();
   const { t } = useLanguage();
-  const [allVisitors] = useVisitorsData();
+  const { currentUser } = useAuth();
+  const [allVisitors, setAllVisitors] = useState([]);
   const [visitors, setVisitors] = useState([]);
   const [nextVisitor, setNextVisitor] = useState(null);
+
+  // 🔥 Ladda besökare från Firebase
+  useEffect(() => {
+    let unsubscribe = null;
+
+    const loadVisitors = async () => {
+      if (!currentUser?.id) return;
+
+      try {
+        const result = await getUserHousehold(currentUser.id);
+        if (result.success && result.householdId) {
+          unsubscribe = subscribeToVisitors(result.householdId, (response) => {
+            if (response.success) {
+              setAllVisitors(response.visitors || []);
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error loading visitors:', error);
+      }
+    };
+
+    loadVisitors();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [currentUser]);
 
   useEffect(() => {
     if (allVisitors && allVisitors.length > 0) {
